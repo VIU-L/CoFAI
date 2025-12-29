@@ -1,3 +1,30 @@
+"""
+Backbone implementations using timm library.
+
+Available Model Names in timm: https://huggingface.co/timm/collections
+
+1. DINOv2 Models (auto-generated based on model_size and with_registers):
+   - 'vit_small_patch14_dinov2.lvd142m'
+   - 'vit_small_patch14_reg4_dinov2.lvd142m' (with registers)
+   - 'vit_base_patch14_dinov2.lvd142m'
+   - 'vit_base_patch14_reg4_dinov2.lvd142m' (with registers)
+   - 'vit_large_patch14_dinov2.lvd142m'
+   - 'vit_large_patch14_reg4_dinov2.lvd142m' (with registers)
+   - 'vit_giant_patch14_dinov2.lvd142m'
+   - 'vit_giant_patch14_reg4_dinov2.lvd142m' (with registers)
+
+2. MAE Models:
+   - 'vit_base_patch16_224.mae' (default, standard MAE model)
+   - 'vit_base_patch16_mae.in1k' (alternative naming)
+
+3. SigLIP2 Models:
+   - 'vit_base_patch16_siglip_224' (default, standard SigLIP model)
+   - 'vit_base_patch16_siglip.in1k' (alternative naming)
+   - 'vit_base_patch16_siglip_256' (alternative size)
+
+Note: All backbones in this module use only timm library implementations.
+"""
+
 import torch
 import torch.nn as nn
 import torchvision.transforms as transforms
@@ -168,7 +195,15 @@ class Dinov2TimmBackbone(nn.Module):
         return_format: str = "[whole]",
         token_res: tuple = None,
     ) -> list:
-        allow_formats = ["[whole]", "[cls,patch]", "[cls]", "[patch]", "[patch2d]"]
+        """Internal decode method with flexible return formats."""
+        allow_formats = [
+            "[whole]",
+            "[cls,patch]",
+            "[cls]",
+            "[patch]",
+            "[patch2d]",
+            "[patch_rae]",
+        ]
         assert return_format in allow_formats, (
             f"return_format must be one of {allow_formats}"
         )
@@ -214,7 +249,18 @@ class Dinov2TimmBackbone(nn.Module):
             )
 
             if norm:
-                multi_outputs = [dino.norm(out) for out in multi_outputs]
+                if return_format == "[patch_rae]":
+                    # For RAE: use LayerNorm without learnable affine parameters
+                    # This matches Dinov2TimmwithNorm with normalize=True
+                    for i, out in enumerate(multi_outputs):
+                        # Manual layer norm without affine parameters
+                        mean = out.mean(dim=-1, keepdim=True)
+                        var = out.var(dim=-1, keepdim=True, unbiased=False)
+                        multi_outputs[i] = (out - mean) / torch.sqrt(
+                            var + dino.norm.eps
+                        )
+                else:
+                    multi_outputs = [dino.norm(out) for out in multi_outputs]
 
         if return_format == "[whole]":
             return multi_outputs
@@ -235,6 +281,10 @@ class Dinov2TimmBackbone(nn.Module):
                 rearrange(out, "b (h w) c -> b c h w", h=h, w=w)
                 for out in multi_patch_tokens
             ]
+            return multi_patch_tokens
+
+        elif return_format == "[patch_rae]":
+            # Return patch tokens for RAE (already extracted from normalized outputs)
             return multi_patch_tokens
 
     def decode_whole(self, h, token_res=None):
@@ -266,3 +316,277 @@ class Dinov2TimmBackbone(nn.Module):
             return_format="[patch2d]",
             token_res=token_res,
         )
+
+    def decode_rae(self, h, token_res=None):
+        """Decode encoded features for RAE decoder input.
+
+        This method processes encoded features through the remaining transformer blocks
+        and returns patch tokens without prefix tokens for RAE decoder.
+        The input h should be the output from the encode method (after blocks[:slot]).
+
+        This method uses LayerNorm without learnable affine parameters (matching
+        Dinov2TimmwithNorm with normalize=True). This equals to simple normalization.
+        """
+        multi_outputs = self._decode(
+            h,
+            slot=self.slot,
+            n=1,  # Take only the last layer
+            norm=False,
+            return_format="[patch]",
+            token_res=token_res,
+        )
+        out: torch.Tensor = multi_outputs[0]
+        mean = out.mean(dim=-1, keepdim=True)
+        var = out.var(dim=-1, keepdim=True, unbiased=False)
+        out = (out - mean) / torch.sqrt(var + self.model.norm.eps)
+
+        return out
+
+    def _decode_latter_blocks(self, h, slot=-3, n_blocks=1, norm=True, token_res=None):
+        # for example, dinov2 base has 12 blocks in total, named as [0, 1, 2, ..., 11]
+        # if slot is -3, it means the input feature is after the blocks[8], it the 9th block
+        # if n_blocks is 2, it means apply the blocks[9-10] and the begin layernorm of blocks[11]
+        # if n_blocks is 3, it means apply the blocks[9-11] and last layernorm of the model
+        if slot < 0:
+            curr_layer = len(self.model.blocks) + slot - 1
+        else:
+            curr_layer = slot - 1
+        last_layer = len(self.model.blocks) - 1
+        assert curr_layer + n_blocks <= last_layer, (
+            f"not possible to decode latter {n_blocks} blocks, current layer: {curr_layer}, total layers: {last_layer}"
+        )
+
+        # Use autocast for mixed precision computation
+        with torch.autocast(device_type=self.device_type, dtype=self.cast_dtype):
+            for i in range(curr_layer + 1, curr_layer + n_blocks + 1):
+                h = self.model.blocks[i](h)
+        if norm:
+            # we'll retrieve the layernorm of the next vit block if norm required
+            if curr_layer + n_blocks == last_layer:
+                h = self.model.norm(h)
+            else:
+                h = self.model.blocks[curr_layer + n_blocks + 1].norm1(h)
+        return h
+
+
+class MAETimmBackbone(nn.Module):
+    """
+    MAE (Masked Autoencoder) backbone using timm library.
+
+    This backbone uses ViT-MAE from timm library and provides
+    encode/decode functionality for RAE.
+
+    Available model names in timm:
+        - 'vit_base_patch16_224.mae' (default, standard MAE model)
+        - 'vit_base_patch16_mae.in1k' (alternative naming)
+
+    Args:
+        model_name (str): Timm model name, e.g., 'vit_base_patch16_224.mae'.
+                         Defaults to 'vit_base_patch16_224.mae'.
+        img_size (int): Input image size. Defaults to 256.
+        patch_size (int): Patch embedding size. Defaults to 16.
+        slot (int): Block slicing position for feature extraction.
+                   -1 means use all blocks. Defaults to -1.
+        cast_dtype (str or torch.dtype): Data type for autocast mixed precision.
+                   Defaults to "float".
+        device (str): Device to run the model on. Defaults to "cuda" if available, else "cpu".
+    """
+
+    # Available MAE model names in timm (will be tried in order)
+    AVAILABLE_MAE_MODELS = [
+        "vit_base_patch16_224.mae",  # Standard MAE model
+        "vit_base_patch16_mae.in1k",  # Alternative naming
+    ]
+
+    def __init__(
+        self,
+        model_name: str = "vit_base_patch16_224.mae",
+        img_size: int = 256,
+        patch_size: int = 16,
+        slot: int = -1,
+        device: str = "cuda" if torch.cuda.is_available() else "cpu",
+        cast_dtype: str = "float",
+    ):
+        super().__init__()
+        self.model_name = model_name
+        self.img_size = img_size
+        self.patch_size = patch_size
+        self.slot = slot
+        self.device = device
+        self.device_type = self.device.split(":")[0]
+        self.cast_dtype = parse_dtype(cast_dtype)
+
+        # Try to load MAE model from timm
+        mae_model_names = [model_name] + self.AVAILABLE_MAE_MODELS
+        self.model = None
+
+        for name in mae_model_names:
+            try:
+                self.model = timm.create_model(
+                    name,
+                    pretrained=True,
+                    img_size=img_size,
+                    patch_size=patch_size,
+                )
+                self.hidden_size = self.model.embed_dim
+                # Disable learnable parameters in final norm (for RAE compatibility)
+                if hasattr(self.model, "norm") and self.model.norm is not None:
+                    self.model.norm.elementwise_affine = False
+                    self.model.norm.weight = None
+                    self.model.norm.bias = None
+                if name != model_name:
+                    print(f"Info: Using timm model '{name}' instead of '{model_name}'")
+                break
+            except Exception:
+                continue
+
+        if self.model is None:
+            raise RuntimeError(
+                f"Failed to load MAE model from timm. Tried: {mae_model_names}"
+            )
+
+        # Use ImageNet normalization (standard for timm ViT models)
+        self.input_transform = transforms.Compose(
+            [
+                transforms.Normalize(
+                    mean=[0.4850, 0.4560, 0.4060], std=[0.2290, 0.2240, 0.2250]
+                ),
+            ]
+        )
+
+        self.model.eval()
+
+    def encode(self, x: torch.Tensor) -> torch.Tensor:
+        """Encode input images through the MAE encoder.
+
+        Args:
+            x (torch.Tensor): Input images of shape (B, 3, H, W).
+
+        Returns:
+            h (torch.Tensor): Encoded features, shape (B, N, C).
+        """
+        with torch.autocast(device_type=self.device_type, dtype=self.cast_dtype):
+            x = self.input_transform(x)
+            x = self.model.patch_embed(x)
+            x = self.model._pos_embed(x)
+            x = self.model.norm_pre(x)
+            for blk in self.model.blocks:
+                x = blk(x)
+            h = x
+
+        return h
+
+
+class SigLIP2TimmBackbone(nn.Module):
+    """
+    SigLIP2 backbone using timm library.
+
+    This backbone uses SigLIP2 from timm library and provides
+    encode/decode functionality for RAE.
+
+    Available model names in timm:
+        - 'vit_base_patch16_siglip_224' (default, standard SigLIP model)
+        - 'vit_base_patch16_siglip.in1k' (alternative naming)
+        - 'vit_base_patch16_siglip_256' (alternative size)
+
+    Args:
+        model_name (str): Timm model name for SigLIP2.
+                         Defaults to 'vit_base_patch16_siglip_224'.
+        img_size (int): Input image size. Defaults to 224.
+        patch_size (int): Patch embedding size. Defaults to 16.
+        slot (int): Block slicing position for feature extraction.
+                   -1 means use all blocks. Defaults to -1.
+        cast_dtype (str or torch.dtype): Data type for autocast mixed precision.
+                   Defaults to "float".
+        device (str): Device to run the model on. Defaults to "cuda" if available, else "cpu".
+    """
+
+    # Available SigLIP2 model names in timm (will be tried in order)
+    AVAILABLE_SIGLIP_MODELS = [
+        "vit_base_patch16_siglip_224",  # Standard SigLIP model
+        "vit_base_patch16_siglip.in1k",  # Alternative naming
+        "vit_base_patch16_siglip_256",  # Alternative size
+    ]
+
+    def __init__(
+        self,
+        model_name: str = "vit_base_patch16_siglip_224",
+        img_size: int = 224,
+        patch_size: int = 16,
+        slot: int = -1,
+        device: str = "cuda" if torch.cuda.is_available() else "cpu",
+        cast_dtype: str = "float",
+    ):
+        super().__init__()
+        self.model_name = model_name
+        self.img_size = img_size
+        self.patch_size = patch_size
+        self.slot = slot
+        self.device = device
+        self.device_type = self.device.split(":")[0]
+        self.cast_dtype = parse_dtype(cast_dtype)
+
+        # Try to load SigLIP2 model from timm
+        siglip_model_names = [model_name] + self.AVAILABLE_SIGLIP_MODELS
+        self.model = None
+
+        for name in siglip_model_names:
+            try:
+                self.model = timm.create_model(
+                    name,
+                    pretrained=True,
+                    img_size=img_size,
+                    patch_size=patch_size,
+                )
+                self.hidden_size = self.model.embed_dim
+                # Disable learnable parameters in final norm (for RAE compatibility)
+                if hasattr(self.model, "norm") and self.model.norm is not None:
+                    self.model.norm.elementwise_affine = False
+                    self.model.norm.weight = None
+                    self.model.norm.bias = None
+                if name != model_name:
+                    print(f"Info: Using timm model '{name}' instead of '{model_name}'")
+                break
+            except Exception:
+                continue
+
+        if self.model is None:
+            raise RuntimeError(
+                f"Failed to load SigLIP2 model from timm. Tried: {siglip_model_names}"
+            )
+
+        # Use SigLIP2 normalization (timm SigLIP2 models expect mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
+        # This matches the timm model's default_cfg
+        self.input_transform = transforms.Compose(
+            [
+                transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
+            ]
+        )
+
+        self.model.eval()
+
+    def encode(self, x: torch.Tensor) -> torch.Tensor:
+        """Encode input images through the SigLIP2 encoder.
+
+        Args:
+            x (torch.Tensor): Input images of shape (B, 3, H, W).
+
+        Returns:
+            h (torch.Tensor): Encoded features, shape (B, N, C).
+        """
+        with torch.autocast(device_type=self.device_type, dtype=self.cast_dtype):
+            x = self.input_transform(x)
+            x = self.model.patch_embed(x)
+            x = self.model._pos_embed(x)
+            x = self.model.norm_pre(x)
+            for blk in self.model.blocks:
+                x = blk(x)
+            # Apply final norm (without affine parameters, matching transformers version)
+            # This matches the behavior of transformers SiglipVisionModel which applies post_layernorm
+            if hasattr(self.model, "norm") and self.model.norm is not None:
+                h = self.model.norm(x)
+            else:
+                h = x
+
+        return h
+
