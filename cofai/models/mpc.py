@@ -4,7 +4,7 @@ import torch.nn as nn
 from compressai.models.base import CompressionModel
 from compressai.models.utils import conv
 
-from cofai.backbone.base import Dinov2TimmBackbone, VqganBackbone
+from cofai.backbone import *
 from cofai.token_codecs.base import UniformTokenCodec
 from cofai.latent_codecs.vit_feature_codec import (
     VitUnionLatentCodec,
@@ -12,7 +12,6 @@ from cofai.latent_codecs.vit_feature_codec import (
     VitUnionLatentCodecCtxAsHyper,
     VbrVitUnionLatentCodec,
 )
-from cofai.backbone.base import *
 from cofai.utils.registery import instantiate_class, register
 
 

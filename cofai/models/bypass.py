@@ -9,7 +9,7 @@ feature extraction pipeline.
 import torch
 from compressai.registry import register_model
 from compressai.models.base import CompressionModel
-from cofai.backbone.base import Dinov2TimmBackbone
+from cofai.backbone import *
 
 
 @register_model("Dinov2TimmBypass")

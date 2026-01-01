@@ -13,7 +13,7 @@ from compressai.models.base import CompressionModel
 
 from einops import rearrange
 
-from cofai.backbone.base import Dinov2TimmBackbone, Dinov2OrgBackbone
+from cofai.backbone import *
 from cofai.latent_codecs.vtm import VtmFeatureCodec
 from cofai.entropy_models.vqfc_model import VQFC
 

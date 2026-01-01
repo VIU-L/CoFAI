@@ -1,0 +1,268 @@
+import torch
+import torch.nn as nn
+import torchvision.transforms as transforms
+from einops import rearrange
+from .base import parse_dtype, BackboneProtocol
+import timm
+
+
+class Dinov2TimmBackbone(nn.Module):
+    """
+    DINOv2 backbone using timm library.
+
+    This class extends the DINOv2 model to provide flexible feature extraction.
+    The DINOv2 backbone implemented with timm supports variable patch sizes and dynamic input image sizes.
+    The `slot` parameter determines the splitting point for dividing the ViT blocks into:
+
+    * encode part: blocks[:slot],
+    * decode part: blocks[slot:]
+
+    Intermediate feature are extracted after the encode part and before the decode part.
+
+    Args:
+        model_size (str): Model variant specification ('small', 'base', 'large', 'giant'). Defaults to 'small'.
+        img_size (int): Base input image size. Defaults to 256.
+        patch_size (int): Patch embedding size. Defaults to 16.
+        dynamic_size (bool): Whether to support dynamically varying input sizes. Defaults to False.
+        slot (int or None): Block slicing position for feature extraction. Follows Python list slicing conventions.
+                   Defaults to -4.
+        n_last_blocks (int): Number of final blocks to utilize for feature aggregation. Defaults to 4.
+        ckpt_path (str, optional): Path to pre-trained checkpoint for initialization. Defaults to None.
+        cast_dtype (str or torch.dtype): Data type for autocast mixed precision.
+                   Supports string format like "torch.float", "torch.float16", "float32", etc.
+                   Defaults to "torch.float".
+        device (str): Device to run the model on. Defaults to "cuda" if available, else "cpu".
+        with_registers (bool): Whether to use register tokens in the model. Defaults to False.
+
+    """
+
+    def __init__(
+        self,
+        model_size: str = "small",
+        img_size: int = 256,
+        patch_size: int = 16,
+        dynamic_size: bool = False,
+        slot: int = -4,  # cut position
+        n_last_blocks: int = 4,  # number of last blocks to take
+        ckpt_path: str = None,
+        device: str = "cuda" if torch.cuda.is_available() else "cpu",
+        cast_dtype: str = "float",  # Data type for autocast, supports string configuration
+        with_registers: bool = False,
+    ):
+        super().__init__()
+        self.n_last_blocks = n_last_blocks
+        assert model_size in ["small", "base", "large", "giant"]
+        self.model_size = model_size
+        self.img_size = img_size
+        self.patch_size = patch_size
+        self.dynamic_size = dynamic_size
+        self.slot = slot
+        self.n_last_blocks = n_last_blocks
+        self.ckpt_path = ckpt_path
+        self.device = device
+        self.device_type = self.device.split(":")[0]
+        self.cast_dtype = parse_dtype(cast_dtype)
+        self.with_registers = with_registers
+        self.model = self.load_timm_model()
+        self.input_transform = transforms.Compose(
+            [
+                transforms.Normalize(
+                    mean=[0.4850, 0.4560, 0.4060], std=[0.2290, 0.2240, 0.2250]
+                ),
+            ]
+        )
+        # Set hidden_size and patch_size attributes for Protocol
+        self.hidden_size = self.model.embed_dim
+        self.patch_size = (
+            self.model.patch_embed.proj.kernel_size[0]
+            if hasattr(self.model.patch_embed.proj, "kernel_size")
+            else patch_size
+        )
+
+    def load_timm_model(self):
+        model_name = f"vit_{self.model_size}_patch14_dinov2.lvd142m"
+        if self.with_registers:
+            model_name = f"vit_{self.model_size}_patch14_reg4_dinov2.lvd142m"
+
+        feature_model = timm.create_model(
+            model_name,
+            pretrained=True,
+            img_size=self.img_size,
+            patch_size=self.patch_size,
+            drop_path_rate=0.0,
+            dynamic_img_size=self.dynamic_size,
+        )
+        feature_model.eval()
+        return feature_model
+
+    def forward(self, x, task="whole"):
+        """Forward pass through the backbone.
+
+        Args:
+            x (torch.Tensor): Input images of shape (B, 3, H, W).
+            task (str): Task type, one of ["whole", "cls", "seg"]. Defaults to "whole".
+
+        Returns:
+            feats (list[torch.Tensor]): Output features, format depends on task.
+        """
+        assert task in ["whole", "cls", "seg"]
+        with torch.inference_mode():
+            h = self.encode(x)
+            token_res = (x.size(2) // self.patch_size, x.size(3) // self.patch_size)
+            h = self.decode(h, token_res=token_res, task=task)
+            return h
+
+    def encode(self, x: torch.Tensor) -> torch.Tensor:
+        """Encode input images through the encoder part of the DINOv2 model.
+
+        The encoding process applies input normalization, patch embedding, positional
+        embedding, and processes the input through the first `slot` transformer blocks.
+
+        Args:
+            x (torch.Tensor): Input images of shape (B, 3, H, W).
+
+        Returns:
+            h (torch.Tensor): Encoded features after the encoder blocks, shape (B, N, C).
+        """
+        dino = self.model
+        with torch.autocast(device_type=self.device_type, dtype=self.cast_dtype):
+            x = self.input_transform(x)
+            x = dino.patch_embed(x)
+            x = dino._pos_embed(x)
+            x = dino.patch_drop(x)
+            x = dino.norm_pre(x)
+            for i, blk in enumerate(dino.blocks[: self.slot]):
+                x = blk(x)
+        return x
+
+    def decode(self, h, token_res=None, task="whole"):
+        """Decode encoded features through the decoder part of the DINOv2 model.
+
+        Args:
+            h (torch.Tensor): Encoded features from the encoder.
+            token_res (tuple, optional): Token resolution (H, W) for reshaping patch tokens.
+                                        Defaults to None.
+            task (str): Decoding task type. Must be one of:
+
+                - "whole": Return full token sequences from multiple layers.
+                - "cls": Return class tokens and patch tokens separately.
+                - "seg": Return patch tokens reshaped to 2D spatial format.
+                Defaults to "whole".
+
+        Returns:
+            feats (list[torch.Tensor, ...]): Decoded features, format depends on task.
+        """
+        if task == "whole":
+            return self.decode_whole(h, token_res=token_res)
+        elif task == "cls":
+            return self.decode_cls(h, token_res=token_res)
+        elif task == "seg":
+            return self.decode_seg(h, token_res=token_res)
+
+    def _decode(
+        self,
+        x: torch.Tensor,
+        slot: int = -4,
+        n: int = 4,
+        norm: bool = True,
+        return_format: str = "[whole]",
+        token_res: tuple = None,
+    ) -> list:
+        allow_formats = ["[whole]", "[cls,patch]", "[cls]", "[patch]", "[patch2d]"]
+        assert return_format in allow_formats, (
+            f"return_format must be one of {allow_formats}"
+        )
+        dino = self.model
+
+        multi_outputs = []
+
+        # If n is an int, take the n last blocks. If it's a list, take them
+        total_layers = len(dino.blocks)
+        if isinstance(n, int):
+            need_layers = range(total_layers - n, total_layers)
+        elif isinstance(n, list):
+            need_layers = n
+
+        # locate the input feature x is after the layer of curr_layer
+        if slot is None:
+            curr_layer = total_layers - 1
+        elif isinstance(slot, int):
+            if slot < 0:
+                curr_layer = total_layers + slot - 1
+            else:
+                curr_layer = slot - 1
+        else:
+            raise ValueError(f"slot must be an int or None, got {type(slot)}")
+
+        if curr_layer > min(need_layers):
+            raise ValueError(
+                f"not possible to take required layers, input layer: {curr_layer}, need layers: {need_layers}"
+            )
+        elif curr_layer == min(need_layers):
+            # input feature is just needed
+            multi_outputs.append(x)
+
+        # Use autocast for mixed precision computation
+        with torch.autocast(device_type=self.device_type, dtype=self.cast_dtype):
+            for i in range(curr_layer + 1, total_layers):
+                x = dino.blocks[i](x)
+                if i in need_layers:
+                    multi_outputs.append(x)
+
+            assert len(multi_outputs) == len(need_layers), (
+                f"only {len(multi_outputs)} / {len(need_layers)} blocks found"
+            )
+
+            if norm:
+                multi_outputs = [dino.norm(out) for out in multi_outputs]
+
+        if return_format == "[whole]":
+            return multi_outputs
+
+        multi_class_tokens = [out[:, 0] for out in multi_outputs]
+        multi_patch_tokens = [out[:, dino.num_prefix_tokens :] for out in multi_outputs]
+
+        if return_format == "[cls,patch]":
+            # feature list: [[cls token, patch tokens], ..., [cls token, patch tokens]]
+            return tuple(zip(multi_class_tokens, multi_patch_tokens))
+        elif return_format == "[cls]":
+            return multi_class_tokens
+        elif return_format == "[patch]":
+            return multi_patch_tokens
+        elif return_format == "[patch2d]":
+            h, w = token_res
+            multi_patch_tokens = [
+                rearrange(out, "b (h w) c -> b c h w", h=h, w=w)
+                for out in multi_patch_tokens
+            ]
+            return multi_patch_tokens
+
+    def decode_whole(self, h, token_res=None):
+        return self._decode(
+            h,
+            slot=self.slot,
+            n=self.n_last_blocks,
+            norm=True,
+            return_format="[whole]",
+            token_res=token_res,
+        )
+
+    def decode_cls(self, h, token_res=None):
+        return self._decode(
+            h,
+            slot=self.slot,
+            n=self.n_last_blocks,
+            norm=True,
+            return_format="[cls,patch]",
+            token_res=token_res,
+        )
+
+    def decode_seg(self, h, token_res):
+        return self._decode(
+            h,
+            slot=self.slot,
+            n=self.n_last_blocks,
+            norm=True,
+            return_format="[patch2d]",
+            token_res=token_res,
+        )
