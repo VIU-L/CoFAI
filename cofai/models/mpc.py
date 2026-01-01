@@ -35,11 +35,11 @@ class MPC_I1(CompressionModel):
         patch_size (int): Patch size used by the model (fixed at 16).
     """
 
-    def __init__(self, vqgan_config, **kwargs):
+    def __init__(self, tokenizer, token_codec, patch_size=16, **kwargs):
         super().__init__()
-        self.vqgan = VqganBackbone(vqgan_config)
-        self.vqgan_codec = UniformTokenCodec(self.vqgan.codebook_size)
-        self.patch_size = 16
+        self.tokenizer = instantiate_class(tokenizer)
+        self.token_codec = instantiate_class(token_codec)
+        self.patch_size = patch_size
 
     def forward(self, x, **kwargs):
         """
@@ -58,10 +58,10 @@ class MPC_I1(CompressionModel):
                 - "likelihoods": Likelihoods from the codec
                 - "x_hat": Reconstructed image tensor
         """
-        vqgan_enc = self.vqgan.encode(x)
-        vqgan_out = self.vqgan_codec(vqgan_enc["tokens"])
-        x_hat = self.vqgan.decode(vqgan_enc["z_q"])
-        return {"likelihoods": vqgan_out["likelihoods"], "x_hat": x_hat}
+        tk_enc = self.tokenizer.encode(x)
+        tk_out = self.token_codec(tk_enc["tokens"])
+        x_hat = self.tokenizer.decode(tk_enc["z_q"])
+        return {"likelihoods": tk_out["likelihoods"], "x_hat": x_hat}
 
     def compress(self, x, **kwargs):
         """
@@ -77,8 +77,8 @@ class MPC_I1(CompressionModel):
                 - "strings": Compressed byte strings
                 - "pstate": Compression state information
         """
-        vqgan_enc = self.vqgan.encode(x)
-        coded_unit = self.vqgan_codec.compress(vqgan_enc["tokens"])
+        tk_enc = self.tokenizer.encode(x)
+        coded_unit = self.token_codec.compress(tk_enc["tokens"])
         return coded_unit
 
     def decompress(self, coded_unit, **kwargs):
@@ -99,10 +99,10 @@ class MPC_I1(CompressionModel):
                 - "tokens": VQGAN tokens
                 - "x_hat": Reconstructed image tensor
         """
-        out = self.vqgan_codec.decompress(**coded_unit)
+        out = self.token_codec.decompress(**coded_unit)
         tokens = out["tokens"]
-        z_q = self.vqgan.tokens_to_features(tokens)
-        x_hat = self.vqgan.decode(z_q)
+        z_q = self.tokenizer.tokens_to_features(tokens)
+        x_hat = self.tokenizer.decode(z_q)
         task_feats = {"z_q": z_q, "tokens": tokens, "x_hat": x_hat}
         return task_feats
 
