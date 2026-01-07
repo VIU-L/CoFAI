@@ -6,23 +6,20 @@ adapted to work with the CoFAI framework while maintaining compatibility
 with RFC's original data loading.
 """
 
-import sys
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Any
+from typing import Any, Dict, List, Tuple
 
 import numpy as np
 import torch
 import torch.utils.data as data
 from PIL import Image
-
-# RFC code has been migrated to cofai, no need for external RFC dependency
+from cofai.transforms import get_mlore_transforms  # noqa: E402
 
 
 __all__ = [
     "MLoREImageDataset",
     "PASCALContextDataset",
     "NYUDDataset",
-    "get_mlore_transforms",
     "get_mlore_dataset",
     "collate_mlore",
 ]
@@ -53,7 +50,15 @@ class MLoREImageDataset(data.Dataset):
     ):
         self.root = root
         self.split = split
+        from cofai.engine.evaluator import ALLOWED_KINDS
+
         self.tasks = tasks or ['semseg', 'edge']
+        bad = [t for t in self.tasks if str(t) not in ALLOWED_KINDS]
+        if bad:
+            raise ValueError(
+                f"Invalid tasks for {self.__class__.__name__}: {bad}. "
+                f"Allowed kinds: {sorted(ALLOWED_KINDS)}"
+            )
         self.transform = transform
         self.img_size = img_size
         
@@ -77,7 +82,7 @@ class MLoREImageDataset(data.Dataset):
         }
         
         # Create sample dict
-        sample = {"image": img, "meta": img_meta}
+        sample = {"img": img, "meta": img_meta}
         
         # Load labels for each task
         for task in self.tasks:
@@ -164,34 +169,12 @@ class PASCALContextDataset(MLoREImageDataset):
         return len(self._dataset)
     
     def __getitem__(self, index):
-        # Get sample from underlying dataset
         sample = self._dataset[index]
-        
-        # Convert to CoFAI format
-        img_meta = {
-            "img_path": self.images[index],
-            "img_name": sample['meta']['img_name'],
-            # RFC/evaluation链路使用img_size/img_name字段
-            "img_size": sample['meta']['img_size'],
-            # 保留旧字段，避免破坏现有调用
-            "ori_size": sample['meta']['img_size'],
-        }
-        
-        result = {
-            "image": sample["image"],
-            "meta": img_meta,
-        }
-        
-        # Copy task labels
-        for task in self.tasks:
-            if task in sample:
-                result[task] = sample[task]
-        
-        # Apply transforms
+        sample["meta"]["img_path"] = self.images[index]
+        sample["meta"]["ori_size"] = sample["meta"]["img_size"]
         if self.transform is not None:
-            result = self.transform(result)
-        
-        return result
+            sample = self.transform(sample)
+        return sample
 
 
 class NYUDDataset(MLoREImageDataset):
@@ -256,76 +239,12 @@ class NYUDDataset(MLoREImageDataset):
         return len(self._dataset)
     
     def __getitem__(self, index):
-        # Get sample from underlying dataset
         sample = self._dataset[index]
-        
-        # Convert to CoFAI format
-        img_meta = {
-            "img_path": self.images[index],
-            "img_name": self.im_ids[index],
-            # RFC/evaluation链路使用img_size/img_name字段
-            "img_size": sample['meta']['img_size'] if 'meta' in sample else sample['image'].shape[:2],
-            # 保留旧字段，避免破坏现有调用
-            "ori_size": sample['meta']['img_size'] if 'meta' in sample else sample['image'].shape[:2],
-        }
-        
-        result = {
-            "image": sample["image"],
-            "meta": img_meta,
-        }
-        
-        # Copy task labels
-        for task in self.tasks:
-            if task in sample:
-                result[task] = sample[task]
-        
-        # Apply transforms
+        sample["meta"]["img_path"] = self.images[index]
+        sample["meta"]["ori_size"] = sample["meta"]["img_size"]
         if self.transform is not None:
-            result = self.transform(result)
-        
-        return result
-
-
-def get_mlore_transforms(p=None, split='train'):
-    """
-    Get data transforms for MLoRE datasets.
-    
-    Args:
-        p: Configuration dict (optional)
-        split: Data split ('train' or 'val')
-        
-    Returns:
-        Transform pipeline
-    """
-    import torchvision
-    from cofai.datasets.rfcdata import transforms
-    
-    # Note: transforms are handled inline, no external dependency needed
-    
-    # Default scales
-    train_scale = p.TRAIN.SCALE if p else (512, 512)
-    test_scale = p.TEST.SCALE if p else (512, 512)
-    
-    if split == 'train':
-        transform = torchvision.transforms.Compose([
-            transforms.RandomScaling(scale_factors=[0.5, 2.0], discrete=False),
-            transforms.RandomCrop(size=train_scale, cat_max_ratio=0.75),
-            transforms.RandomHorizontalFlip(p=0.5),
-            transforms.PhotoMetricDistortion(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-            transforms.PadImage(size=train_scale),
-            transforms.AddIgnoreRegions(),
-            transforms.ToTensor(),
-        ])
-    else:
-        transform = torchvision.transforms.Compose([
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-            transforms.PadImage(size=test_scale),
-            transforms.AddIgnoreRegions(),
-            transforms.ToTensor(),
-        ])
-    
-    return transform
+            sample = self.transform(sample)
+        return sample
 
 
 def get_mlore_dataset(
@@ -394,11 +313,11 @@ def collate_mlore(batch: List[Dict[str, Any]]) -> Dict[str, Any]:
     task_labels = {}
     
     for sample in batch:
-        images.append(sample['image'])
+        images.append(sample["img"])
         metas.append(sample['meta'])
         
         for key in sample:
-            if key not in ['image', 'meta']:
+            if key not in ['img', 'meta']:
                 if key not in task_labels:
                     task_labels[key] = []
                 task_labels[key].append(sample[key])
@@ -415,11 +334,11 @@ def collate_mlore(batch: List[Dict[str, Any]]) -> Dict[str, Any]:
         if isinstance(labels[0], torch.Tensor):
             task_labels[key] = torch.stack(labels, dim=0)
         else:
-            task_labels[key] = torch.stack([torch.from_numpy(l) for l in labels], dim=0)
+            task_labels[key] = torch.stack([torch.from_numpy(arr) for arr in labels], dim=0)
     
     # Build result
     result = {
-        'image': images,
+        'img': images,
         'meta': metas,
         **task_labels
     }

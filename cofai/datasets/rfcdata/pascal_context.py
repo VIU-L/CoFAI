@@ -240,7 +240,7 @@ class PASCALContext(data.Dataset):
         sample = {}
 
         _img = self._load_img(index)
-        sample['image'] = _img
+        sample["img"] = _img
 
         if self.do_edge:
             _edge = self._load_edge(index)
