@@ -165,7 +165,7 @@ class Dinov2SegmentationHead(nn.Module):
                 Defaults to None.
             **kwargs (dict): Additional keyword arguments passed to parent class.
         """
-        super().__init__(**kwargs)
+        super().__init__()
         self.in_channels = in_channels
         self.in_index = in_index
         self.input_transform = input_transform
@@ -274,18 +274,21 @@ class Dinov2SegmentationHead(nn.Module):
         x = self.conv_seg(x)
         return x
 
-    def predict(self, inputs, scale=1, size=None):
-        """Predict segmentation logits with optional resizing.
+    def predict(self, inputs, scale=1, size=None, *, argmax: bool = False, **kwargs):
+        """Resize segmentation logits like inference; optionally reduce to class map.
 
         Args:
             inputs (list[torch.Tensor] or torch.Tensor): Input features from backbone.
-            scale (float): Scale factor for resizing output. If scale != 1, output
-                will be resized by this factor. Defaults to 1.
-            size (tuple[int, int], optional): Target size (height, width) for resizing.
-                If provided, output will be resized to this size. Defaults to None.
+            scale (float): If != 1, logits are resized to ``(tok_h * scale, tok_w * scale)``.
+            size (tuple[int, int], optional): If set (and ``scale == 1``), resize logits
+                to this ``(H, W)``.
+            argmax (bool): If True, return class indices ``(B, H, W)``. If False (default),
+                return logits ``(B, num_classes, H, W)``.
+            **kwargs: Ignored; for compatibility.
 
         Returns:
-            seg_logits (torch.Tensor): Segmentation logits of shape (B, num_classes, H, W).
+            If ``argmax`` is False: logits (B, num_classes, H, W).
+            If ``argmax`` is True: class map (B, H, W).
         """
         seg_logits = self.forward(inputs)
         _, _, tok_h, tok_w = seg_logits.shape
@@ -304,6 +307,8 @@ class Dinov2SegmentationHead(nn.Module):
                 mode="bilinear",
                 align_corners=self.align_corners,
             )
+        if argmax:
+            return seg_logits.argmax(dim=1)
         return seg_logits
 
     def slide_predict(
