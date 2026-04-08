@@ -7,6 +7,7 @@ approaches for handling different image sizes.
 """
 
 import torch
+import torch.nn as nn
 
 from compressai.registry import register_model
 from compressai.models.base import CompressionModel
@@ -14,6 +15,7 @@ from compressai.models.base import CompressionModel
 from einops import rearrange
 
 from cofai.backbone import *
+from cofai.engine.registry import instantiate_class
 from cofai.latent_codecs.vtm import VtmFeatureCodec
 from cofai.entropy_models.vqfc_model import VQFC
 
@@ -601,6 +603,135 @@ class Dinov2OrigSlideSegVQFC(CompressionModel):
         return task_feats
 
 
+@register_model("Dinov2TimmSegVQFC")
+class Dinov2TimmSegVQFC(CompressionModel):
+    """
+    DINOv2-Timm backbone + VQFC compression for segmentation.
+
+    This model is designed for dynamic-resolution inference/training where image
+    size can vary after resolution transforms (e.g., center_pad). Unlike the
+    slide-based Orig backbone pipeline, this class directly compresses patch2d
+    features from Dinov2TimmBackbone.
+    """
+
+    def __init__(
+        self,
+        dino_backbone={},
+        vqfc_codec={},
+        slide_size=None,
+        slide_stride=None,
+        heads: dict | None = None,
+        **kwargs,
+    ):
+        super().__init__()
+        self.dino = Dinov2TimmBackbone(**dino_backbone)
+        self.vqfc = VQFC(**vqfc_codec)
+        if hasattr(self.vqfc, "uncondi_entropy_model"):
+            self.vqfc.uncondi_entropy_model.get_ready_for_compression()
+
+        self.patch_size = self.dino.patch_size
+        self.img_size = self.dino.img_size
+        self.dynamic_size = self.dino.dynamic_size
+        self.slide_size = slide_size
+        self.slide_stride = slide_stride
+
+        self.heads = nn.ModuleDict()
+        if heads:
+            if not isinstance(heads, dict):
+                raise TypeError("heads must be a dict mapping task -> head config")
+            for task, hcfg in heads.items():
+                if not isinstance(task, str):
+                    continue
+                if hcfg is None:
+                    continue
+                if not isinstance(hcfg, dict) or "type" not in hcfg:
+                    raise ValueError(f"heads.{task} must be a dict with a 'type' field")
+                self.heads[task] = instantiate_class(hcfg)
+
+    def _encode_seg_features(self, x):
+        # seg_features: list of [B, C, Htok, Wtok], length = n_last_blocks
+        seg_features = self.dino(x, task="seg")
+        if not isinstance(seg_features, (list, tuple)) or len(seg_features) == 0:
+            raise RuntimeError("Expected non-empty seg feature list from backbone")
+
+        # Stack then reshape to tokens: (B*L, HW, C)
+        feat_5d = torch.stack(seg_features, dim=1)  # [B, L, C, Htok, Wtok]
+        b, n_layers, c, ht, wt = feat_5d.shape
+        tokens = rearrange(feat_5d, "b l c h w -> (b l) (h w) c")
+        return tokens, (b, n_layers, c, ht, wt)
+
+    @staticmethod
+    def _tokens_to_seg_features(tokens, meta):
+        b, n_layers, c, ht, wt = meta
+        feat_5d = rearrange(tokens, "(b l) (h w) c -> b l c h w", b=b, l=n_layers, h=ht, w=wt)
+        return list(feat_5d.unbind(dim=1))
+
+    def forward(self, x):
+        raise NotImplementedError("This model is for inference only.")
+
+    def forward_test(self, x, qp=None, tasks=[], **kwargs):
+        tokens, meta = self._encode_seg_features(x)  # tokens: [B*L, HW, C]
+        tokens_hat, mse_loss, strings, encoding_inds = self.vqfc.compress(tokens)
+        seg_hat = self._tokens_to_seg_features(tokens_hat, meta)
+
+        task_feats = {}
+        if "cls" in tasks:
+            raise NotImplementedError("cls decoding is not supported")
+        if "semseg" in tasks and "semseg" in self.heads:
+            task_feats["semseg"] = self.heads["semseg"].predict(
+                seg_hat, scale=int(self.patch_size)
+            )
+        if "seg" in tasks:
+            # One-crop feature list for segmentation head.slide_predict
+            task_feats["seg"] = [seg_hat]
+
+        coded_data = {
+            "strings": {"vqfc": [strings]},
+            "pstate": {
+                "tokens_shape": tuple(tokens.shape),
+                "meta": meta,
+            },
+        }
+        return coded_data, task_feats
+
+    def get_feature_numel(self, x):
+        tokens, _ = self._encode_seg_features(x)
+        return tokens.numel()
+
+    def compress(self, x, qp=None, **kwargs):
+        with torch.inference_mode():
+            tokens, meta = self._encode_seg_features(x)
+            tokens_hat, mse_loss, strings, encoding_inds = self.vqfc.compress(tokens)
+            coded_unit = {
+                "strings": {"vqfc": [strings]},
+                "pstate": {
+                    "tokens_shape": tuple(tokens.shape),
+                    "meta": meta,
+                },
+            }
+            return coded_unit
+
+    def decompress(self, coded_unit, tasks=[], **kwargs):
+        strings = coded_unit["strings"]["vqfc"][0]
+        tokens_shape = tuple(coded_unit["pstate"]["tokens_shape"])
+        meta = tuple(coded_unit["pstate"]["meta"])
+        tokens_hat = self.vqfc.decompress(strings, tokens_shape)
+        tokens_hat = tokens_hat.to(next(self.parameters()).device)
+        seg_hat = self._tokens_to_seg_features(tokens_hat, meta)
+
+        task_feats = {}
+        if "cls" in tasks:
+            raise NotImplementedError("cls decoding is not supported")
+        if "semseg" in tasks and "semseg" in self.heads:
+            task_feats["semseg"] = self.heads["semseg"].predict(
+                seg_hat, scale=int(self.patch_size)
+            )
+        if "seg" in tasks:
+            # One-crop feature list for segmentation head.slide_predict
+            task_feats["seg"] = [seg_hat]
+        return task_feats
+
+
 @register_model("Dinov2OrigClsVQFC")
 class Dinov2OrigClsVQFC(CompressionModel):
     """
@@ -622,6 +753,7 @@ class Dinov2OrigClsVQFC(CompressionModel):
         self,
         dino_backbone={},
         vqfc_codec={},
+        heads: dict | None = None,
         **kwargs,
     ):
         super().__init__()
@@ -633,6 +765,19 @@ class Dinov2OrigClsVQFC(CompressionModel):
         self.vqfc = VQFC(**vqfc_codec)
         if hasattr(self.vqfc, "uncondi_entropy_model"):
             self.vqfc.uncondi_entropy_model.get_ready_for_compression()
+
+        self.heads = nn.ModuleDict()
+        if heads:
+            if not isinstance(heads, dict):
+                raise TypeError("heads must be a dict mapping task -> head config")
+            for task, hcfg in heads.items():
+                if not isinstance(task, str):
+                    continue
+                if hcfg is None:
+                    continue
+                if not isinstance(hcfg, dict) or "type" not in hcfg:
+                    raise ValueError(f"heads.{task} must be a dict with a 'type' field")
+                self.heads[task] = instantiate_class(hcfg)
 
     def forward(self, x):
         raise NotImplementedError("This model is for inference only.")
@@ -646,16 +791,17 @@ class Dinov2OrigClsVQFC(CompressionModel):
         if "cls" in tasks:
             h_dino_hat, mse_loss, strings, encoding_inds = self.vqfc.compress(h_dino)
             cls_features = self.dino.decode_cls(h_dino_hat)
-            task_feats["cls"] = cls_features
-
-        # Return mock coded_data
-        coded_data = {
-            "strings": {"vqfc": [strings]},
-            "pstate": {"feat_shape": h_dino.shape},
-        }
+            if "cls" in self.heads:
+                task_feats["cls"] = self.heads["cls"](cls_features)
+            coded_data = {
+                "strings": {"vqfc": [strings]},
+                "pstate": {"feat_shape": tuple(h_dino.shape)},
+            }
+        else:
+            coded_data = {"bits": {}}
         return coded_data, task_feats
 
-    def compress(self, x, qp=None):
+    def compress(self, x, qp=None, **kwargs):
         """
         Compress input image to byte strings using VQFC for classification.
 
@@ -665,6 +811,7 @@ class Dinov2OrigClsVQFC(CompressionModel):
         Args:
             x (torch.Tensor): Input image tensor of shape (B, C, H, W).
             qp (int, optional): Unused; kept for API compatibility.
+            **kwargs: Swallowed for API compatibility (e.g. ``tasks`` from eval).
 
         Returns:
             coded_unit (dict): Dictionary containing:
@@ -696,7 +843,7 @@ class Dinov2OrigClsVQFC(CompressionModel):
                 - "strings": {"vqfc": [strings]} from compress
                 - "pstate": {"feat_shape": tuple}
             tasks (list of str): List of tasks. Supported: "cls".
-            **kwargs: Additional arguments (unused).
+            **kwargs: Swallowed for API compatibility (e.g. ``task_specs``).
 
         Returns:
             task_feats (dict): Dictionary with "cls" key if "cls" in tasks.
@@ -712,7 +859,9 @@ class Dinov2OrigClsVQFC(CompressionModel):
         if "seg" in tasks:
             raise NotImplementedError("seg decoding is not supported")
         if "cls" in tasks:
-            task_feats["cls"] = self.dino.decode_cls(h_dino_hat)
+            cls_features = self.dino.decode_cls(h_dino_hat)
+            if "cls" in self.heads:
+                task_feats["cls"] = self.heads["cls"](cls_features)
         return task_feats
 
 
