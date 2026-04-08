@@ -8,7 +8,7 @@ import time
 # from torch.cuda.amp import autocast
 # from sklearn.mixture import GaussianMixture
 
-from mpcompress.entropy_models.fcvq_entropy import SoftmaxPrior, DiscreteEntropyModel
+from cofai.entropy_models.fcvq_entropy import SoftmaxPrior, DiscreteEntropyModel
 import math
 
 

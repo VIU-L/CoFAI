@@ -13,9 +13,9 @@
 ```shell
 sudo apt-get install cmake g++ ninja-build
 poetry activate
-cd mpcompress/cpp/
+cd cofai/cpp/
 pip install .
-cd mpcompress/layers/extensions/inference/
+cd cofai/layers/extensions/inference/
 pip install .
 ```
 

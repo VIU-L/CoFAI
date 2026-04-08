@@ -1,1 +1,1 @@
-::: mpcompress.utils
+::: cofai.utils

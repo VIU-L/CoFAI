@@ -71,7 +71,7 @@ def infer_img_detection(img_path, rlt_dir):
 #     img_path = os.path.join(img_dir, img_file)
 #     infer_img_detection(img_path, rlt_dir)
 
-base_dir = "/home/faymek/MPCompress/"
+base_dir = "/home/faymek/CoFAI/"
 img_dir = f"{base_dir}/data/dataset/COCO_val2017_sel100/img"
 img_files = [f for f in os.listdir(img_dir) if f.lower().endswith(('.jpg', '.jpeg', '.png'))]
 

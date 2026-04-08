@@ -456,11 +456,11 @@ def run_vtm_compression(org_feat_path, test_root, cfg, QP):
 
 if __name__ == "__main__":
     org_feat_path = (
-        "/home/faymek/MPCompress/data/dataset/ImageNet_val_sel100/feat_provide"
+        "/home/faymek/CoFAI/data/dataset/ImageNet_val_sel100/feat_provide"
     )
     preset_name = "dinov2_cls"
     QPs = [42]
     for QP in QPs:
         cfg = get_vtm_fc_config(preset_name)
-        test_root = f"/home/faymek/MPCompress/data/test-fc/ImageNet--dinov2_cls/vtm_{cfg.config_str}"
+        test_root = f"/home/faymek/CoFAI/data/test-fc/ImageNet--dinov2_cls/vtm_{cfg.config_str}"
         run_vtm_compression(org_feat_path, test_root, cfg, QP)

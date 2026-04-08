@@ -1,1 +1,1 @@
-::: mpcompress.utils.tensor_ops
+::: cofai.utils.tensor_ops

@@ -1,1 +1,1 @@
-::: mpcompress.utils.debug
+::: cofai.utils.debug

@@ -6,22 +6,22 @@ import json
 import os
 import time
 import torch
-from mpcompress.utils.common import (
+from cofai.utils.common import (
     str2bool,
     generate_summary,
     dump_json,
     set_torch_env,
 )
-from mpcompress.entropy_models.dcvc_base import DmcCompressionModel
-from mpcompress.models.dcvcrt.pframe import DMCP
-from mpcompress.models.dcvcrt.iframe import DMCI
-from mpcompress.models.dcvcrt.video import DCVC_RT_Video
-from mpcompress.metrics.utils import DataFrameRecords
+from cofai.entropy_models.dcvc_base import DmcCompressionModel
+from cofai.models.dcvcrt.pframe import DMCP
+from cofai.models.dcvcrt.iframe import DMCI
+from cofai.models.dcvcrt.video import DCVC_RT_Video
+from cofai.metrics.utils import DataFrameRecords
 
-from mpcompress.datasets.video_reader import PngSequenceVideoReader, YUV420VideoReader
-from mpcompress.datasets.video_writer import PngSequenceVideoWriter, YUV420VideoWriter
-from mpcompress.utils.metrics import calc_psnr, calc_msssim, calc_msssim_rgb
-from mpcompress.utils.transforms import (
+from cofai.datasets.video_reader import PngSequenceVideoReader, YUV420VideoReader
+from cofai.datasets.video_writer import PngSequenceVideoWriter, YUV420VideoWriter
+from cofai.utils.metrics import calc_psnr, calc_msssim, calc_msssim_rgb
+from cofai.utils.transforms import (
     rgb2ycbcr,
     ycbcr2rgb,
     yuv_444_to_420,
@@ -214,11 +214,11 @@ def main():
 
     video_model = DCVC_RT_Video(
         dmci_codec={
-            "type": "mpcompress.models.dcvcrt.iframe.DMCI",
+            "type": "cofai.models.dcvcrt.iframe.DMCI",
             "load_path": "/home/faymek/DCVC/checkpoints/cvpr2025_image.pth.tar",
         },
         dmcp_codec={
-            "type": "mpcompress.models.dcvcrt.pframe.DMCP",
+            "type": "cofai.models.dcvcrt.pframe.DMCP",
             "load_path": "/home/faymek/DCVC/checkpoints/cvpr2025_video.pth.tar",
         },
     )

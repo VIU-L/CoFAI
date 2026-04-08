@@ -14,7 +14,7 @@ RFC/MLoRE 多任务特征压缩评估脚本
         --task pascal_multitask \
         --cuda
 
-框架规范: https://faymek.github.io/MPCompress/framework/
+框架规范: https://faymek.github.io/CoFAI/framework/
 """
 
 import argparse
@@ -39,11 +39,11 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from mpcompress.models import MLoREFrameCodec, MLoREVideoCodec
-from mpcompress.datasets import PASCALContextDataset, NYUDDataset, get_mlore_transforms, collate_mlore
-from mpcompress.losses.mlore_loss import MLoRECodingLoss
-from mpcompress.utils.tensor_ops import center_pad
-from mpcompress.utils.rfc_utils import center_crop
+from cofai.models import MLoREFrameCodec, MLoREVideoCodec
+from cofai.datasets import PASCALContextDataset, NYUDDataset, get_mlore_transforms, collate_mlore
+from cofai.losses.mlore_loss import MLoRECodingLoss
+from cofai.utils.tensor_ops import center_pad
+from cofai.utils.rfc_utils import center_crop
 # Disable warnings
 warnings.filterwarnings("ignore", category=UserWarning)
 warnings.filterwarnings("ignore", category=FutureWarning)
@@ -90,7 +90,7 @@ def calc_bits_from_strings(strings: Dict[str, List[List[bytes]]]) -> Dict[str, f
             bits_items["z"] = sum(len(s) if isinstance(s, bytes) else len(s[0]) for s in (z_strings if isinstance(z_strings, list) else [z_strings])) * 8.0
         else:
             raise ValueError(f"Unexpected strings list length: {len(strings)}")
-    # 处理MPCompress格式（字典）
+    # 处理CoFAI格式（字典）
     elif isinstance(strings, dict):
         for name, sub_strings in strings.items():
             bits = sum(len(s[0]) if isinstance(s, list) else len(s) for s in sub_strings) * 8.0
@@ -165,7 +165,7 @@ def instantiate_model(config: Dict, eval_tasks=None, device: str = 'cuda') -> ML
     model_type = config.pop('type')
     
     # 构建配置对象
-    from mpcompress.backbone.mlore import create_mlore_config
+    from cofai.backbone.mlore import create_mlore_config
     
     tasks_config = config.get('tasks', {})
     # 如果指定了评估任务，使用评估任务列表；否则使用配置中的任务列表
@@ -218,28 +218,28 @@ def get_performance_meter(task: str, p: Dict) -> Any:
     ignore_index = p.get('ignore_index', 255)
     
     if task == 'semseg':
-        from mpcompress.utils.evaluation.eval_semseg import SemsegMeter
+        from cofai.utils.evaluation.eval_semseg import SemsegMeter
         return SemsegMeter(database, ignore_idx=ignore_index)
     elif task == 'human_parts':
-        from mpcompress.utils.evaluation.eval_human_parts import HumanPartsMeter
+        from cofai.utils.evaluation.eval_human_parts import HumanPartsMeter
         return HumanPartsMeter(database, ignore_idx=ignore_index)
     elif task == 'edge':
-        from mpcompress.utils.evaluation.eval_edge import EdgeMeter
+        from cofai.utils.evaluation.eval_edge import EdgeMeter
         edge_w = p.get('edge_w', 0.95)
         return EdgeMeter(pos_weight=edge_w, ignore_index=ignore_index)
     elif task == 'normals':
-        from mpcompress.utils.evaluation.eval_normals import NormalsMeter
+        from cofai.utils.evaluation.eval_normals import NormalsMeter
         return NormalsMeter(ignore_index=ignore_index)
     elif task == 'sal':
-        from mpcompress.utils.evaluation.eval_sal import SaliencyMeter
+        from cofai.utils.evaluation.eval_sal import SaliencyMeter
         return SaliencyMeter(ignore_index=ignore_index, threshold_step=0.05, beta_squared=0.3)
     elif task == 'depth':
-        from mpcompress.utils.evaluation.eval_depth import DepthMeter
+        from cofai.utils.evaluation.eval_depth import DepthMeter
         max_depth = p.get('TASKS', {}).get('depth_max', 10.0)
         min_depth = p.get('TASKS', {}).get('depth_min', 0.001)
         return DepthMeter(max_depth=max_depth, min_depth=min_depth)
     elif task == 'scene':
-        from mpcompress.utils.evaluation.eval_scene import ClassificationMeter
+        from cofai.utils.evaluation.eval_scene import ClassificationMeter
         return ClassificationMeter(database)
     else:
         return None
@@ -284,7 +284,7 @@ def inference_compress_decompress(
         # 原始RFC: model.module(images, batch=batch) - 不传递episode_tasks
         start_time = time.time()
         # 使用forward而不是forward_test，传递tasks但不传递episode_tasks（使用默认值None）
-        # 注意：原始RFC的forward不接收tasks参数，但MPCompress版本需要
+        # 注意：原始RFC的forward不接收tasks参数，但CoFAI版本需要
         out = model.forward(x, tasks=tasks, episode_tasks=None)
         elapsed_time = time.time() - start_time
         
@@ -360,7 +360,7 @@ def eval_model(cfg: OmegaConf) -> tuple:
     # ===== 保持与原始RFC一致：使用RFC同款 transforms 对 image + labels 一起处理 =====
     # 原始RFC的评估数据是通过 transforms.Normalize + PadImage + AddIgnoreRegions + ToTensor 得到的。
     if 'transform' not in dataset_config or dataset_config.get('transform') is None:
-        from mpcompress.datasets import get_mlore_transforms
+        from cofai.datasets import get_mlore_transforms
         # 优先使用模型自身的配置（create_mlore_config生成），保证TEST.SCALE一致
         p_for_tf = getattr(model, 'p', None)
         dataset_config['transform'] = get_mlore_transforms(p_for_tf, split='val')
@@ -406,7 +406,7 @@ def eval_model(cfg: OmegaConf) -> tuple:
     # # Optional: RFC-style loss report (edge/bpp/mse) based on raw logits
     report_rfc_loss = bool(getattr(args, "report_rfc_loss", False))
     if report_rfc_loss:
-        from mpcompress.losses.loss_functions import BalancedBinaryCrossEntropyLoss
+        from cofai.losses.loss_functions import BalancedBinaryCrossEntropyLoss
         ignore_index = int(p_config.get("ignore_index", 255))
         edge_w = float(p_config.get("edge_w", 0.95))
         edge_crit = BalancedBinaryCrossEntropyLoss(pos_weight=edge_w, ignore_index=ignore_index).to(device)

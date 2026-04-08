@@ -32,7 +32,7 @@ model:
     ckpt_path: ${PROJECT_ROOT}/weights/dinov2/backbone/dinov2_vits14_pretrain.pth
 
   dino_codec:
-    # type: mpcompress.latent_codecs.vtm.VtmFeatureCodec
+    # type: cofai.latent_codecs.vtm.VtmFeatureCodec
     cfg:
       vtm_path: ${PROJECT_ROOT}/weights/std_codec/VTM-21.0
       model_type: dinov2

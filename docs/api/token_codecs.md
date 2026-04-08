@@ -1,1 +1,1 @@
-::: mpcompress.token_codecs
+::: cofai.token_codecs

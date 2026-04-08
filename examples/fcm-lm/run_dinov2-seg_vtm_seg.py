@@ -19,7 +19,7 @@ from mmengine.runner import Runner
 
 # 项目本地相关
 # import dinov2.eval.segmentation.models
-from mpcompress.backbone.dinov2.hub.backbones import dinov2_vitg14
+from cofai.backbone.dinov2.hub.backbones import dinov2_vitg14
 
 from mmengine.model import BaseModule
 from mmseg.registry import MODELS

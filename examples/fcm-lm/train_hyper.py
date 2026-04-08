@@ -40,12 +40,12 @@ from torch.utils.data import DataLoader
 from torchvision import transforms
 
 #gcs
-from mpcompress.datasets import FeatureFolder
+from cofai.datasets import FeatureFolder
 # from compressai.datasets import ImageFolder
 from compressai.losses import RateDistortionLoss
 from compressai.optimizers import net_aux_optimizer
 from compressai.zoo import image_models
-from mpcompress.models import FeatureScaleHyperprior
+from cofai.models import FeatureScaleHyperprior
 import gc
 
 

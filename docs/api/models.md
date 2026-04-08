@@ -1,1 +1,1 @@
-::: mpcompress.models
+::: cofai.models

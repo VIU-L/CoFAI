@@ -1,1 +1,1 @@
-::: mpcompress.latent_codecs
+::: cofai.latent_codecs

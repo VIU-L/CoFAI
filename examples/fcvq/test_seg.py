@@ -3,7 +3,7 @@ import random
 import sys
 import numpy as np
 import torch
-from mpcompress.models.fcvq import Dinov2FCVQCodec
+from cofai.models.fcvq import Dinov2FCVQCodec
 import os
 from dotenv import load_dotenv
 

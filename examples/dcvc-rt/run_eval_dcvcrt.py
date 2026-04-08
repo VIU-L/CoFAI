@@ -19,21 +19,21 @@ import tqdm
 import math
 import warnings
 
-from mpcompress.datasets import *
-from mpcompress.backbone import *
-from mpcompress.heads import *
-from mpcompress.models import *
-from mpcompress.metrics import *
-from mpcompress.metrics.iqa_metrics import create_img_metrics, create_dist_metrics
-from mpcompress.utils.tensor_ops import tensor2image, center_pad, center_crop
-from mpcompress.utils.utils import rename_key_by_rules
-from mpcompress.utils.transforms import rgb2ycbcr, ycbcr2rgb
-from mpcompress.models.dcvcrt.video import DCVC_RT_Video
-from mpcompress.datasets.video import VideoFolder
+from cofai.datasets import *
+from cofai.backbone import *
+from cofai.heads import *
+from cofai.models import *
+from cofai.metrics import *
+from cofai.metrics.iqa_metrics import create_img_metrics, create_dist_metrics
+from cofai.utils.tensor_ops import tensor2image, center_pad, center_crop
+from cofai.utils.utils import rename_key_by_rules
+from cofai.utils.transforms import rgb2ycbcr, ycbcr2rgb
+from cofai.models.dcvcrt.video import DCVC_RT_Video
+from cofai.datasets.video import VideoFolder
 
 
-from mpcompress.metrics.utils import DictAverageMeter, DataFrameRecords
-from mpcompress.utils.debug import extract_shapes
+from cofai.metrics.utils import DictAverageMeter, DataFrameRecords
+from cofai.utils.debug import extract_shapes
 
 
 # Disable Warnings

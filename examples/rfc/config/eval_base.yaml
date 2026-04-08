@@ -1,6 +1,6 @@
 # RFC/MLoRE 评估基础配置
 # 统一评估配置，用于多任务特征压缩评估
-# 框架规范: https://faymek.github.io/MPCompress/framework/
+# 框架规范: https://faymek.github.io/CoFAI/framework/
 PROJECT_ROOT: ${oc.env:PROJECT_ROOT}
 
 # ==================== 数据集配置 ====================

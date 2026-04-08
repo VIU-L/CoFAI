@@ -319,7 +319,7 @@ def get_hyper_fc_config(preset_name):
 
 
 if __name__ == "__main__":
-    data_root = '/home/fz2001/Ant/MPCompress/data'
+    data_root = '/home/fz2001/Ant/CoFAI/data'
     preset_name = "dinov2_cls"
     prefix = "ImageNet--dinov2_cls"
     cfg = get_hyper_fc_config(preset_name)

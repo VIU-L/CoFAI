@@ -21,13 +21,13 @@ import torch
 import torch.nn.functional as F
 from torchvision.transforms import ToPILImage, ToTensor
 
-from mpcompress.datasets import *
-from mpcompress.backbone import *
-from mpcompress.heads import *
-from mpcompress.models import *
-from mpcompress.metrics import *
-from mpcompress.utils.tensor_ops import tensor2image, center_pad, center_crop
-from mpcompress.utils.utils import rename_key_by_rules
+from cofai.datasets import *
+from cofai.backbone import *
+from cofai.heads import *
+from cofai.models import *
+from cofai.metrics import *
+from cofai.utils.tensor_ops import tensor2image, center_pad, center_crop
+from cofai.utils.utils import rename_key_by_rules
 
 from dotenv import load_dotenv
 

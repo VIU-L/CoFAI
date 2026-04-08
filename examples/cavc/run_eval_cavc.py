@@ -28,26 +28,26 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from mpcompress.datasets import *
-from mpcompress.backbone import *
-from mpcompress.heads import *
-from mpcompress.models import *
-from mpcompress.models.cavcodec import *
-from mpcompress.utils.video_processor import *
-from mpcompress.metrics import *
-from mpcompress.backbone import backbone_tools as feature_fns
+from cofai.datasets import *
+from cofai.backbone import *
+from cofai.heads import *
+from cofai.models import *
+from cofai.models.cavcodec import *
+from cofai.utils.video_processor import *
+from cofai.metrics import *
+from cofai.backbone import backbone_tools as feature_fns
 
-from mpcompress.metrics.iqa_metrics import (
+from cofai.metrics.iqa_metrics import (
     create_img_metrics,
     create_dist_metrics,
     split_img_metrics,
 )
-from mpcompress.utils.utils import rename_key_by_rules
+from cofai.utils.utils import rename_key_by_rules
 
-from mpcompress.metrics.utils import DictAverageMeter, DataFrameRecords
-from mpcompress.utils.debug import extract_shapes
+from cofai.metrics.utils import DictAverageMeter, DataFrameRecords
+from cofai.utils.debug import extract_shapes
 
-from mpcompress.backbone.vgg import (
+from cofai.backbone.vgg import (
     setup_vgg_feature_extractor,
     extract_vgg_features,
 )

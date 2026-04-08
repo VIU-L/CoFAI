@@ -1,1 +1,1 @@
-::: mpcompress.datasets
+::: cofai.datasets

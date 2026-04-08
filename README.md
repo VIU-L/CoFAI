@@ -1,6 +1,6 @@
-MPCompress is a PyTorch library and evaluation platform for multi-purpose compression research, providing a public testing environment for evaluating feature coding methods.
+CoFAI is a PyTorch library and evaluation platform for multi-purpose compression research, providing a public testing environment for evaluating feature coding methods.
 
-MPCompress currently provides:
+CoFAI currently provides:
 
 * Multi-Purpose Compression (MPC) framework - a coding architecture designed to prioritize machine vision while retaining compatibility with human visual perception
 * Feature Coding for Large Models (LaMoFC) framework - a feature coding framework for distributed large model deployments
@@ -8,7 +8,7 @@ MPCompress currently provides:
 
 ## Installation
 
-MPCompress supports Python 3.10+, PyTorch 2.4.0 and CUDA 12.1.
+CoFAI supports Python 3.10+, PyTorch 2.4.0 and CUDA 12.1.
 
 ### Using Poetry (Recommended)
 
@@ -21,13 +21,13 @@ curl -sSL https://install.python-poetry.org | python3 -
 Then, create the virtual environment and install the required Python packages:
 
 ```bash
-cd MPCompress
+cd CoFAI
 
 # Install Python packages to new virtual environment.
 poetry install
 echo "Virtual environment created in $(poetry env list --full-path)"
 
-# Link to local MPCompress source code.
+# Link to local CoFAI source code.
 poetry run pip install --editable .
 ```
 
@@ -41,20 +41,21 @@ python install.py
 
 ## Documentation
 
-* [Documentation](https://faymek.github.io/MPCompress)
+* [Documentation](https://faymek.github.io/CoFAI)
+* [Migration Guide (mpcompress -> cofai)](MIGRATION.md)
 
 ## Dataset and Weights Preparation
 
 We provide publicly available datasets and weights via the following link:
 
-Share content: MPCompress-share
+Share content: CoFAI-share
 Link: https://pan.sjtu.edu.cn/web/share/2f9f14e05fa73c8742994aae67198dff
 Extraction code: 1127
 
 Please refer to the examples to download the needed resources and extract them into the current directory. The resulting directory structure should look like this:
 
 ```
-MPCompress/
+CoFAI/
 ├─ data/
 │   ├─ ADEChallengeData2016/
 │   ├─ ImageNet_val_sel2k/
@@ -66,7 +67,7 @@ MPCompress/
 
 The full directory structure is organized as follows:
 ```
-MPCompress/
+CoFAI/
 ├─ data/         # dataset libraries
 ├─ features/     # extracted features
 ├─ runs/         # training logs and checkpoints

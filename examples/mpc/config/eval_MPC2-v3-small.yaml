@@ -20,7 +20,7 @@ model:
   type: MPC_I2
   
   dino_backbone:
-    type: mpcompress.backbone.Dinov2TimmBackbone
+    type: cofai.backbone.Dinov2TimmBackbone
     model_size: small
     img_size: 512
     patch_size: 16
@@ -29,7 +29,7 @@ model:
     n_last_blocks: 4
 
   dino_codec:
-    type: mpcompress.latent_codecs.vit_feature_codec.VitUnionLatentCodec
+    type: cofai.latent_codecs.vit_feature_codec.VitUnionLatentCodec
     h_dim: 384
     y_dim: 48
     z_dim: 48

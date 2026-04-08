@@ -7,7 +7,7 @@ import torch
 from torch.utils.tensorboard import SummaryWriter
 from torch.optim.lr_scheduler import StepLR
 from dataset_seg import Dinov2DatasetTrain
-from mpcompress.models.fcvq import Dinov2FCVQCodec
+from cofai.models.fcvq import Dinov2FCVQCodec
 from dotenv import load_dotenv
 
 load_dotenv()

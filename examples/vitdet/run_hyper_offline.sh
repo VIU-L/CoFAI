@@ -3,7 +3,7 @@
 # use poetry python env
 poetry_env=$(poetry env info -p)
 source "$poetry_env/bin/activate"
-PROJECT_ROOT=/home/faymek/MPCompress
+PROJECT_ROOT=/home/faymek/CoFAI
 
 export CUDA_VISIBLE_DEVICES=0
 

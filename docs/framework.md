@@ -147,7 +147,7 @@ The two-level dictionary structure (`frame/layer -> DU`) is designed considering
 **Debugging Tools:**
 For the complex `coded_data` structure, the reference software provides helper functions to quickly view its shape information:
 ```python
-from mpcompress.utils.debug import extract_shape
+from cofai.utils.debug import extract_shape
 structure_info = extract_shape(coded_data)
 ```
 

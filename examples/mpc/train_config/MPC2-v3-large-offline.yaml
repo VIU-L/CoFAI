@@ -56,12 +56,12 @@ main_scheduler:
 
 train_dataset:
   type: FeatureDictFolder
-  root: /home/faymek/MPCompress/data/dataset/FD-large
+  root: /home/faymek/CoFAI/data/dataset/FD-large
   split: train
 
 val_dataset:
   type: FeatureDictFolder
-  root: /home/faymek/MPCompress/data/dataset/FD-large
+  root: /home/faymek/CoFAI/data/dataset/FD-large
   split: test
 
 train_transforms:

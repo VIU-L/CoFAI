@@ -40,16 +40,16 @@ from torch.utils.data import Dataset, DataLoader, Subset
 from torchvision import datasets, transforms
 from tqdm import tqdm
 
-from mpcompress.backbone.dinov2.hub.classifiers import dinov2_vitg14_lc
+from cofai.backbone.dinov2.hub.classifiers import dinov2_vitg14_lc
 
 # =============================================================================
 # CONFIG
 # =============================================================================
 CONFIG = {
     'DATA_ROOT': '/home/faymek/Datasets/IN1K/val',
-    'BACKBONE_PATH': '/home/liuzk/projects/MPCompress/data/models/backbone/dinov2_vitg14_pretrain.pth',
-    'HEAD_PATH': '/home/liuzk/projects/MPCompress/data/models/clf_head/dinov2_vitg14_linear_head.pth',
-    'OUTPUT_DIR': '/home/liuzk/projects/MPCompress/data/self_extract',
+    'BACKBONE_PATH': '/home/liuzk/projects/CoFAI/data/models/backbone/dinov2_vitg14_pretrain.pth',
+    'HEAD_PATH': '/home/liuzk/projects/CoFAI/data/models/clf_head/dinov2_vitg14_linear_head.pth',
+    'OUTPUT_DIR': '/home/liuzk/projects/CoFAI/data/self_extract',
     'FEATURE_DIR': None,
     'SAMPLES_PER_CLASS': 10,   # <=0 表示整类全选
     'SEED': 42,

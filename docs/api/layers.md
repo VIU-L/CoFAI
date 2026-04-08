@@ -1,1 +1,1 @@
-::: mpcompress.layers
+::: cofai.layers

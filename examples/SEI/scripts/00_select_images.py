@@ -1,7 +1,7 @@
 import os
 import shutil
 # sel 100 files from coco2017 val2017, from the COCO_val2017_sel100 dataset
-base_dir = "/home/faymek/MPCompress/"
+base_dir = "/home/faymek/CoFAI/"
 src_dir = "/path/to/dataset/coco2017/val2017"
 dst_dir = f"{base_dir}/data/dataset/COCO_val2017_sel100/img"
 txt_file = f"{base_dir}/data/dataset/COCO_val2017_sel100/COCO_val2017_sel100.txt"

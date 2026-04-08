@@ -20,7 +20,7 @@ RFC/MLoRE 多任务特征压缩训练脚本
         --config examples/rfc/config/train_stage1.yaml \
         --run_mode train
 
-框架规范: https://faymek.github.io/MPCompress/framework/
+框架规范: https://faymek.github.io/CoFAI/framework/
 """
 
 import argparse

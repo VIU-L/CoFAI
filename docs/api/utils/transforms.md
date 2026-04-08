@@ -1,1 +1,1 @@
-::: mpcompress.utils.transforms
+::: cofai.utils.transforms

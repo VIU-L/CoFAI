@@ -4,7 +4,7 @@ import argparse
 import torch
 import numpy as np
 from tqdm import tqdm
-from mpcompress.models.fcvq import Dinov2FCVQCodec
+from cofai.models.fcvq import Dinov2FCVQCodec
 import time
 from dotenv import load_dotenv
 

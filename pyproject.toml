@@ -29,7 +29,7 @@ notes = [
 ]
 
 [tool.poetry]
-name = "mpcompress"
+name = "cofai"
 version = "0.1.0"
 description = ""
 authors = ["Faymek Feng <faymek.f@gmail.com>"]

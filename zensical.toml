@@ -1,8 +1,8 @@
 [project]
-site_name = "MPCompress"
-repo_name = "faymek/MPCompress"
-repo_url = "https://github.com/faymek/MPCompress"
-site_url = "https://faymek.github.io/MPCompress"
+site_name = "CoFAI"
+repo_name = "faymek/CoFAI"
+repo_url = "https://github.com/faymek/CoFAI"
+site_url = "https://faymek.github.io/CoFAI"
 
 nav = [
   { "Home" = "index.md" },

@@ -1,5 +1,5 @@
-work_dir = '/home/faymek/MPCompress/data/test-fc/dinov2_vitg14_voc2012_linear'
-data_root = "/home/faymek/MPCompress/data/dataset/VOC2012"
+work_dir = '/home/faymek/CoFAI/data/test-fc/dinov2_vitg14_voc2012_linear'
+data_root = "/home/faymek/CoFAI/data/dataset/VOC2012"
 dataset_type = "PascalVOCDataset"
 
 patch_size = 14
@@ -74,7 +74,7 @@ model = dict(
         patch_size=patch_size,
         out_indices=[39],
         final_norm=False,
-        checkpoint="/home/faymek/MPCompress/data/models/backbone/dinov2_vitg14_pretrain.pth",
+        checkpoint="/home/faymek/CoFAI/data/models/backbone/dinov2_vitg14_pretrain.pth",
     ),
     decode_head=dict(
         type="PretrainedBNHead",
@@ -88,7 +88,7 @@ model = dict(
         align_corners=False,
         loss_decode=dict(type="CrossEntropyLoss", use_sigmoid=False, loss_weight=1.0),
         patch_size=patch_size,
-        checkpoint="/home/faymek/MPCompress/data/models/seg_head/dinov2_vitg14_voc2012_linear_head.pth",
+        checkpoint="/home/faymek/CoFAI/data/models/seg_head/dinov2_vitg14_voc2012_linear_head.pth",
     ),
     train_cfg=dict(),
     test_cfg=dict(mode='slide', crop_size=crop_size, stride=stride),

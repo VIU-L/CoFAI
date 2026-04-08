@@ -7,7 +7,7 @@
 ## 目录结构总览
 
 ```
-MPCompress/
+CoFAI/
 ├─ .venv/                                # 虚拟环境
 │
 ├─ data/
@@ -62,7 +62,7 @@ MPCompress/
 ```
 
 **约定**  
-- 项目根目录为 `MPCompress/`。  
+- 项目根目录为 `CoFAI/`。  
 - 文档中的路径均以此根目录为参考点。  
 
 ---
@@ -74,8 +74,8 @@ MPCompress/
 curl -sSL https://install.python-poetry.org | python3 -
 
 # 克隆并进入仓库
-git clone https://github.com/xxx/MPCompress.git
-cd MPCompress
+git clone https://github.com/xxx/CoFAI.git
+cd CoFAI
 
 # 一键安装依赖并创建隔离虚拟环境
 poetry install

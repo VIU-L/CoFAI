@@ -113,7 +113,7 @@ def respondse_with_SEI(img_path, SEI_dir):
 
 if __name__ == "__main__":
 
-    data_dir = "/home/faymek/MPCompress/data"
+    data_dir = "/home/faymek/CoFAI/data"
     work_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     img_dir = os.path.join(data_dir, "dataset", "ImageNet_val_sel100", "img")
     SEI_dir = os.path.join(work_dir, "results", "per-image-SEI")

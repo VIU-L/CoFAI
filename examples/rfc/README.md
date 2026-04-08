@@ -1,10 +1,10 @@
 # RFC/MLoRE 多任务特征压缩示例
 
-本示例展示如何使用 MPCompress 框架进行 MLoRE (Multi-task Low-Rank Expert) 多任务特征压缩的训练和评估。
+本示例展示如何使用 CoFAI 框架进行 MLoRE (Multi-task Low-Rank Expert) 多任务特征压缩的训练和评估。
 
 ## 框架规范
 
-本实现严格遵循 [MPCompress Framework](https://faymek.github.io/MPCompress/framework/) 设计规范：
+本实现严格遵循 [CoFAI Framework](https://faymek.github.io/CoFAI/framework/) 设计规范：
 
 - **DataUnitCodec**: `compress(x)` → `coded_unit`, `decompress(coded_unit)` → `task_feats`
 - **FrameCodec**: 处理单帧多任务压缩
@@ -208,7 +208,7 @@ python examples/rfc/run_eval_rfc.py \
 ### MLoREFrameCodec
 
 ```python
-from mpcompress.models import MLoREFrameCodec
+from cofai.models import MLoREFrameCodec
 
 # 创建模型
 model = MLoREFrameCodec(
@@ -233,7 +233,7 @@ task_feats = model.decompress(coded_unit)
 ### MLoREVideoCodec
 
 ```python
-from mpcompress.models import MLoREVideoCodec
+from cofai.models import MLoREVideoCodec
 
 # 创建视频编解码器
 codec = MLoREVideoCodec(stage='stage1', img_size=(512, 512))

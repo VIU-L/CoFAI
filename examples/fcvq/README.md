@@ -5,7 +5,7 @@
 ## 环境配置
 
 ```
-# 本项目基于MPCompress实现，参考MPCompress环境配置，额外依赖于CompressAI，建议安装开发者版本，至根目录/code下
+# 本项目基于CoFAI实现，参考CoFAI环境配置，额外依赖于CompressAI，建议安装开发者版本，至根目录/code下
 git clone https://github.com/InterDigitalInc/CompressAI compressai
 cd compressai
 pip install -U pip && pip install -e .

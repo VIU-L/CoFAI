@@ -1,1 +1,1 @@
-::: mpcompress.losses
+::: cofai.losses

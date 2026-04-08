@@ -21,14 +21,14 @@ export HF_ENDPOINT=https://hf-mirror.com
 
 如下是数据权重的分享链接
 
-Share content: MPCompress-share
+Share content: CoFAI-share
 Link: https://pan.sjtu.edu.cn/web/share/2f9f14e05fa73c8742994aae67198dff
 Extraction code: 1127
 
 请下载链接中的数据与权重到对应文件夹，形成如下的目录结构。
 
 ```
-MPCompress/
+CoFAI/
 │
 ├─ data/                                  # 论文实验所用各数据子集
 │   ├─ ADEChallengeData2016/

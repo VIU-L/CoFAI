@@ -23,7 +23,7 @@ After pushing, create a Pull Request on GitHub to merge your changes into the `d
 
 # Code Integration
 
-For new projects, please place them under `examples/project/`. Once initial results are achieved, reusable components can be merged into the `mpcompress/` directory.
+For new projects, please place them under `examples/project/`. Once initial results are achieved, reusable components can be merged into the `cofai/` directory.
 
 # Documentation
 

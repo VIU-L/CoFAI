@@ -11,7 +11,7 @@ resolution_transform:
   size: 518
 
 model:
-  type: mpcompress.models.lamofc.Dinov2OrigSlideSegBypass
+  type: cofai.models.lamofc.Dinov2OrigSlideSegBypass
   slide_size: [518, 518]
   slide_stride: [259, 259]
 

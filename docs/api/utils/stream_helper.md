@@ -1,1 +1,1 @@
-::: mpcompress.utils.stream_helper
+::: cofai.utils.stream_helper

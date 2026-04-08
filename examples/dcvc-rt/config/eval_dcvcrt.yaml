@@ -9,7 +9,7 @@ multi_run:
       qp_p: 63
 
 # load:
-#   path: /home/faymek/MPCompress/exp/MPC12-EmD48G3/Q3.0/runner.best.pth.tar
+#   path: /home/faymek/CoFAI/exp/MPC12-EmD48G3/Q3.0/runner.best.pth.tar
 #   strict: true
 #   rules: # type, pattern, replacement
 
@@ -17,10 +17,10 @@ model:
   type: DCVC_RT_Video
 
   dmci_codec:
-    type: mpcompress.models.dcvcrt.iframe.DMCI
+    type: cofai.models.dcvcrt.iframe.DMCI
     load_path: /home/faymek/DCVC/checkpoints/cvpr2025_image.pth.tar
   dmcp_codec:
-    type: mpcompress.models.dcvcrt.pframe.DMCP
+    type: cofai.models.dcvcrt.pframe.DMCP
     load_path: /home/faymek/DCVC/checkpoints/cvpr2025_video.pth.tar
 
 

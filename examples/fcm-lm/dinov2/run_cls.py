@@ -152,7 +152,7 @@ def main(backbone_checkpoint_path: str, head_checkpoint_path: str, source_img_pa
 
 
 if __name__ == "__main__":
-    base_path = '/home/faymek/MPCompress/data'
+    base_path = '/home/faymek/CoFAI/data'
     backbone_checkpoint_path = f'{base_path}/models/backbone/dinov2_vitg14_pretrain.pth'
     head_checkpoint_path = f'{base_path}/models/head/dinov2_vitg14_linear_head.pth'
     source_img_path = f'{base_path}/dataset/ImageNet_val_sel100/img'

@@ -56,8 +56,8 @@ from compressai.zoo.image_vbr import model_architectures as architectures_vbr
 
 #gcs
 import numpy as np 
-from mpcompress.datasets import FeatureFolder
-from mpcompress.models import FeatureScaleHyperprior
+from cofai.datasets import FeatureFolder
+from cofai.models import FeatureScaleHyperprior
 import copy
 
 torch.backends.cudnn.deterministic = True
