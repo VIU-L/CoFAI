@@ -5,6 +5,7 @@ from typing import List, Any
 import torch.nn.functional as F
 from abc import abstractmethod
 import time
+from einops import rearrange
 
 from .fcvq_entropy import SoftmaxPrior, DiscreteEntropyModel
 import math
@@ -82,18 +83,11 @@ class VectorQuantizer(nn.Module):
 
         latents_shape = latents_expand.shape
 
-        latents_expand = (
-            latents_expand.permute(0, 2, 1)
-            .contiguous()
-            .view(
-                latents_shape[0], latents_shape[2], latents_shape[1] // self.D, self.D
-            )
-            .contiguous()
-            .view(
-                latents_shape[0], latents_shape[2] * latents_shape[1] // self.D, self.D
-            )
-            .contiguous()
-        )
+        latents_expand = rearrange(
+            latents_expand,
+            "c (h_group d) w -> c (w h_group) d",
+            d=self.D,
+        ).contiguous()
         assert latents_expand.shape[2] == self.D
 
         quant_codebook = self.embedding.weight
@@ -160,18 +154,11 @@ class VectorQuantizer(nn.Module):
 
         latents_shape = latents_expand.shape
 
-        latents_expand = (
-            latents_expand.permute(0, 2, 1)
-            .contiguous()
-            .view(
-                latents_shape[0], latents_shape[2], latents_shape[1] // self.D, self.D
-            )
-            .contiguous()
-            .view(
-                latents_shape[0], latents_shape[2] * latents_shape[1] // self.D, self.D
-            )
-            .contiguous()
-        )
+        latents_expand = rearrange(
+            latents_expand,
+            "c (h_group d) w -> c (w h_group) d",
+            d=self.D,
+        ).contiguous()
         assert latents_expand.shape[2] == self.D
         quant_codebook = self.embedding.weight
         flat_latents = latents_expand.view(-1, self.D)
