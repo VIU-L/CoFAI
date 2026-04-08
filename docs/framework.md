@@ -214,14 +214,16 @@ class DataUnitCodec:
         return task_feats
 ```
 
-### 3.2 FrameCodec
+### 3.2 LayeredFrameCodec
 
-`FrameCodec` is responsible for handling the encoding and decoding of a single Access Unit (AU), i.e., the collaborative encoding and decoding of all Data Units (DUs) at the same moment. An AU may contain multiple DUs from different layers and inter-layer dependencies. `FrameCodec` needs to coordinate the codec processes of these DUs.
+`LayeredFrameCodec` is responsible for handling the encoding and decoding of a single Access Unit (AU), i.e., the collaborative encoding and decoding of all Data Units (DUs) at the same moment. An AU may contain multiple DUs from different layers and inter-layer dependencies. `LayeredFrameCodec` needs to coordinate the codec processes of these DUs.
+
+Note: In documentation context, \"Picture\" and \"Frame\" are treated as equivalent terms for one time-step image unit. In code naming, `Frame` is preferred for clarity.
 
 #### 3.2.1 Core Interface
 
 ```python
-class FrameCodec:
+class LayeredFrameCodec:
     """Base class for multi-layer frame-level codec, processing a single Access Unit (AU)"""
 
     def __init__(self, layer_configs):
@@ -297,11 +299,11 @@ class FrameCodec:
         return task_feats
 ```
 
-### 3.3 VideoCodec
+### 3.3 LayeredVideoCodec
 
 #### 3.3.1 Core Interface
 
-It is stipulated that all types of `VideoCodec` should implement the `compress_video` and `decompress_video` methods, operating on the `coded_data` intermediate representation.
+It is stipulated that all types of `LayeredVideoCodec` should implement the `compress_video` and `decompress_video` methods, operating on the `coded_data` intermediate representation.
 
 ```python
 def compress_video(video_reader, **kwargs):
@@ -400,6 +402,23 @@ def decompress_video_stream(buff, **kwargs):
 Developers may need to implement the following auxiliary functions to handle syntax based on the chosen coding level:
 - `write_frame_by_syntax`, `read_frame_by_syntax`: Handle frame-level syntax.
 - `write_du_by_syntax`, `read_du_by_syntax`: Handle DU-level syntax.
+
+## 3.5 Unified Spec Contract (Lightweight)
+
+To keep codec interfaces understandable while preserving rapid iteration speed, CoFAI provides a lightweight spec module:
+
+- `cofai/spec/codec.py`
+  - `CodedUnit`: unified DU container (`strings`, `pstate`, optional `meta`)
+  - `CodedData`: unified video/frame container (`type`, `data`, optional `meta`)
+  - `CodecArgs`: common runtime args (`tasks`, `qp`, `device`, `strict`)
+  - `Protocol`/`ABC`: `DataUnitCodecProtocol`, `LayeredFrameCodecProtocol`, `LayeredVideoCodecProtocol`, `StrictValidatingCodecBase`
+In this stage, the spec is intentionally documentation-first:
+
+- use `CodedUnit` / `CodedData` / `CodecArgs` as shared terminology and typing hints
+- keep codec implementation flexible, without mandatory runtime validators
+- enforce compatibility mainly through smoke/regression tests
+
+This lightweight approach reduces engineering overhead for research iteration while still maintaining a common contract vocabulary across modules.
 
 ## 4 Other Interfaces
 

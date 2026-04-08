@@ -4,7 +4,8 @@ CoFAI currently provides:
 
 * Multi-Purpose Compression (MPC) framework - a coding architecture designed to prioritize machine vision while retaining compatibility with human visual perception
 * Feature Coding for Large Models (LaMoFC) framework - a feature coding framework for distributed large model deployments
-* evaluation scripts and test platforms for comparing compression methods
+* a **unified evaluation engine** (`cofai-eval`, Hydra plans under `conf/plan/`) for reproducible benchmarks—see [docs/engine.md](docs/engine.md)
+* examples and test setups for comparing compression methods
 
 ## Installation
 
@@ -31,31 +32,30 @@ echo "Virtual environment created in $(poetry env list --full-path)"
 poetry run pip install --editable .
 ```
 
-Currently, the project use the .env file to avoid hardcoding the absolute path. 
-Run install.py to create the .env file with "PROJECT_ROOT" variable.
+The project uses a `.env` file (via `PROJECT_ROOT`) to avoid hardcoding absolute paths in configs. After `poetry install`, generate it with:
 
 ```bash
-python install.py
+poetry run python install.py
 ```
 
 
 ## Documentation
 
-* [Documentation](https://faymek.github.io/CoFAI)
-* [Migration Guide (mpcompress -> cofai)](MIGRATION.md)
+* [Hosted documentation](https://faymek.github.io/CoFAI)
+* [Evaluation engine](docs/engine.md) — plans, `cofai-eval`, data contracts
+* [Migration Guide (mpcompress → cofai)](MIGRATION.md)
 
 ## Dataset and Weights Preparation
 
 We provide publicly available datasets and weights via the following link:
 
-Share content: CoFAI-share
-Link: https://pan.sjtu.edu.cn/web/share/2f9f14e05fa73c8742994aae67198dff
-Extraction code: 1127
+Link: https://medialab.sjtu.edu.cn/files/CoFAI-share/
 
 Please refer to the examples to download the needed resources and extract them into the current directory. The resulting directory structure should look like this:
 
 ```
 CoFAI/
+├─ cofai/
 ├─ data/
 │   ├─ ADEChallengeData2016/
 │   ├─ ImageNet_val_sel2k/
@@ -68,8 +68,11 @@ CoFAI/
 The full directory structure is organized as follows:
 ```
 CoFAI/
+├─ cofai/        # source code
+├─ conf/         # Hydra defaults and evaluation plans (`plan/*.yaml`)
 ├─ data/         # dataset libraries
 ├─ features/     # extracted features
+├─ logs/         # eval logs
 ├─ runs/         # training logs and checkpoints
 ├─ models/       # vision model libraries, reserved for future use
 ├─ weights/      # pre-trained weights and released checkpoints
@@ -78,6 +81,10 @@ CoFAI/
 ## Usage
 
 Coding examples can be found in the `examples/` directory.
+
+### Eval Engine
+
+We recently added a unified evaluation **engine** (`cofai/engine/`) so that datasets, preprocessing, tasks and metrics, models, and checkpoints are wired together through declarative **plans**—making it easier to reproduce runs and compare methods under the same protocol. Command-line usage (`poetry run cofai-eval`), plan layout (`conf/plan/`), and the full data/runtime contract are documented in **[docs/engine.md](docs/engine.md)**.
 
 ### Testing LaMoFC
 
@@ -111,7 +118,7 @@ For implementation details and usage examples, please refer to the directory `ex
 
 ### Testing RFC (AITISA AI M2268)
 
-RFC [3] studies a feature disentanglement and compression approach for multi-task ViT models. To extract task-relevant knowledge, it introduces rate constraints and task-specific losses to encourage the network to discard irrelevant information while preserving task-related information. To improve flexibility, it adopts a simple strategy: fine-tune a task-specific client-side network for each task, while different tasks share the same cloud-side network. This design can be conveniently deployed and adjusted by distributing different client-side model parameters.
+RFC studies a feature disentanglement and compression approach for multi-task ViT models. To extract task-relevant knowledge, it introduces rate constraints and task-specific losses to encourage the network to discard irrelevant information while preserving task-related information. To improve flexibility, it adopts a simple strategy: fine-tune a task-specific client-side network for each task, while different tasks share the same cloud-side network. This design can be conveniently deployed and adjusted by distributing different client-side model parameters.
 
 For implementation details and usage examples, please refer to the directory `examples/rfc/` and its dedicated [README](examples/rfc/README.md).
 
