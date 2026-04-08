@@ -1,4 +1,5 @@
-# Config for lamofc slide seg FCVQ - 512 embeddings (pretrained, no lmbda3)
+# Config for lamofc slide seg FCVQ - 512 embeddings, lmbda=3
+# Original mIoU from training: 0.774
 
 multi_run:
   1.0:
@@ -11,7 +12,7 @@ resolution_transform:
   size: 518
 
 model:
-  type: Dinov2OrigSlideSegFCVQ
+  type: Dinov2OrigSlideSegVQFC
   slide_size: [518, 518]
   slide_stride: [259, 259]
 
@@ -24,12 +25,12 @@ model:
     n_last_blocks: 1
     ckpt_path: ${PROJECT_ROOT}/weights/dinov2/backbone/dinov2_vitg14_pretrain.pth
 
-  fcvq_codec:
+  vqfc_codec:
     num_embeddings: 512
     embedding_dim: 10
     num_chunks: 1
-    lmbda: 1.0
-    ckpt_path: ${PROJECT_ROOT}/weights/FCVQ/DINOv2/seg/epoch_300num_512chunk_1.pth.tar
+    lmbda: 3.0
+    ckpt_path: ${PROJECT_ROOT}/weights/VQFC/DINOv2/seg/epoch_300num_512chunk_1_lmbda_3.pth.tar
 
 allow_heads:
   - voc2012_seg_giant_last1

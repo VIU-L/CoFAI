@@ -1,4 +1,4 @@
-# FCVQ
+# VQFC
 
 ---
 
@@ -17,12 +17,12 @@ pip install -U pip && pip install -e .
 
 | 作用                              | 路径                                                         | 说明                                                         |
 | --------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
-| **FCVQ** 超参数                   | `/code/examples/fcvq/cfg/cls.yaml`、`/code/examples/fcvq/cfg/seg.yaml` | 控制码本维度、码本大小、分块大小、$\lambda$等超参数；可复制并通过 `--cfg` 指定 |
-| **DINOv2** 分割 **MMCV** 测试配置 | `/code/examples/fcvq/cfg/dinov2_vitg14_voc2012_linear_config.py` | 定义 DINOv2 backbone 与线性分割头的测试流程，包含数据加载、滑窗策略与预处理设置，适用于 VOC2012 数据集测试；更换路径或类别需同步调整 |
-| DINOv2分类测试集配置文件          | `/code/examples/cfg/examples/fcvq/cfg/imagenet_selected_label500.txt` | 从ImageNet数据集中选取的原始图像label                        |
-| DINOv2分割测试集配置文件          | `/code/examples/cfg/examples/fcvq/cfg/val_100.txt`           | 从Val2012数据集中选取的原始图像label                         |
+| **VQFC** 超参数                   | `examples/vqfc/offline/cfg/cls.yaml`、`examples/vqfc/offline/cfg/seg.yaml` | 控制码本维度、码本大小、分块大小、分块数量、$\lambda$等超参数；可复制并通过 `--cfg` 指定 |
+| **DINOv2** 分割 **MMCV** 测试配置 | `examples/vqfc/offline/cfg/dinov2_vitg14_voc2012_linear_config.py` | 定义 DINOv2 backbone 与线性分割头的测试流程，包含数据加载、滑窗策略与预处理设置，适用于 VOC2012 数据集测试；更换路径或类别需同步调整 |
+| DINOv2分类测试集配置文件          | `examples/vqfc/offline/cfg/imagenet_selected_label500.txt` | 从 ImageNet 数据集中选取的原始图像 label 列表 |
+| DINOv2分割测试集配置文件          | `examples/vqfc/offline/cfg/val_100.txt`           | 从 VOC2012 val 中选取的原始图像列表 |
 
-- 分割任务使用的 MMCV 配置默认读取 `conf-mmcv/dinov2_vitg14_voc2012_linear_config.py`；如需自定义，可在脚本中修改 `--mmcv_cfg` 指向自己的 `.py` 配置文件。  在测试时直接使用测试集配置文件读取相应的特征数据集。
+- 离线分割任务使用的 MMCV 配置位于 `examples/vqfc/offline/cfg/dinov2_vitg14_voc2012_linear_config.py`；如需自定义，可在离线脚本中修改 `--mmcv_cfg` 指向自己的 `.py` 配置文件。在测试时直接使用测试集配置文件读取相应的特征数据集。
 
 
 ---
@@ -124,18 +124,18 @@ CUDA_VISIBLE_DEVICES=0 python examples/fcm-lm/run_dinov2-seg_vtm_seg.py   --cfg 
 
 其中 segmentation 任务使用了滑动窗口推理，classification 任务使用了整图推理。
 
-**FCVQ 推理示例**：
+**VQFC 推理示例**：
 
 ```bash 
-CUDA_VISIBLE_DEVICES=0 python examples/fcvq/run_eval_slide.py \
-    --config examples/fcvq/config/eval_base.yaml examples/fcvq/config/dino_orig_slide_giant_seg_fcvq_64.yaml \
+CUDA_VISIBLE_DEVICES=0 python examples/vqfc/run_eval_slide.py \
+    --config examples/vqfc/config/eval_base.yaml examples/vqfc/config/dino_orig_slide_giant_seg_vqfc_64.yaml \
     --preset voc2012_sel20_seg \
     --head voc2012_seg_giant_last1 \
     --quality 1.0 \
     --cuda --output_dir eval_test --real
 
-CUDA_VISIBLE_DEVICES=0 python examples/fcvq/run_eval_slide.py \
-      --config examples/fcvq/config/eval_base.yaml examples/fcvq/config/dino_orig_slide_giant_cls_fcvq_512.yaml \
+CUDA_VISIBLE_DEVICES=0 python examples/vqfc/run_eval_slide.py \
+      --config examples/vqfc/config/eval_base.yaml examples/vqfc/config/dino_orig_slide_giant_cls_vqfc_512.yaml \
       --preset imagenet_sel100_cls \
       --head imagenet_cls_giant_last1 \
       --quality 1.0 \

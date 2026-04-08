@@ -4,7 +4,7 @@ import argparse
 import torch
 import numpy as np
 from tqdm import tqdm
-from cofai.models.fcvq import Dinov2FCVQCodec
+from cofai.models.vqfc import Dinov2VQFCCodec
 import time
 from dotenv import load_dotenv
 
@@ -22,9 +22,9 @@ def test_epoch(codec, vq_path):
     eval_mse = 0.0
     eval_rate = 0.0
 
-    raw_dir = f"{PROJECT_ROOT}/features/fcvq/cls/test"
+    raw_dir = f"{PROJECT_ROOT}/features/vqfc/cls/test"
     with open(
-        f"{PROJECT_ROOT}/examples/fcvq/cfg/imagenet_selected_label500.txt", "r"
+        f"{PROJECT_ROOT}/examples/vqfc/cfg/imagenet_selected_label500.txt", "r"
     ) as f:
         data = f.readlines()
 
@@ -44,7 +44,7 @@ def test_epoch(codec, vq_path):
         with torch.no_grad():
             start_enc = time.time()
             coded_unit = codec.compress(feat_in)
-            strings = coded_unit["strings"]["indices"][0]
+            strings = coded_unit["strings"]["vqfc"][0]
             feat_shape = coded_unit["pstate"]["feat_shape"]
             end_enc = time.time()
             enc_time_total += end_enc - start_enc
@@ -97,7 +97,7 @@ def parse_args(argv):
     parser.add_argument(
         "--vq_path",
         type=str,
-        default=f"{PROJECT_ROOT}/weights/fcvq/cls/epoch_100num_8chunk_1.pth.tar",
+        default=f"{PROJECT_ROOT}/weights/vqfc/cls/epoch_100num_8chunk_1.pth.tar",
     )
     parser.add_argument("--embedding_dim", type=int, default=64)
     parser.add_argument("--num_embeddings", type=int, default=8)
@@ -111,8 +111,8 @@ def main(argv):
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     print("using {} device.".format(device))
 
-    codec = Dinov2FCVQCodec(
-        fcvq_kwargs=dict(
+    codec = Dinov2VQFCCodec(
+        vqfc_kwargs=dict(
             num_embeddings=args.num_embeddings,
             embedding_dim=args.embedding_dim,
             num_chunks=args.num_chunks,

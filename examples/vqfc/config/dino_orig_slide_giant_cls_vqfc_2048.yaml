@@ -11,7 +11,7 @@ resolution_transform:
   size: [224, 224]
 
 model:
-  type: Dinov2OrigClsFCVQ
+  type: Dinov2OrigClsVQFC
 
   dino_backbone:
     model_size: giant
@@ -22,12 +22,12 @@ model:
     n_last_blocks: 1
     ckpt_path: ${PROJECT_ROOT}/weights/dinov2/backbone/dinov2_vitg14_pretrain.pth
 
-  fcvq_codec:
+  vqfc_codec:
     num_embeddings: 2048
     embedding_dim: 32
     num_chunks: 1
     lmbda: 1.0
-    ckpt_path: ${PROJECT_ROOT}/weights/FCVQ/DINOv2/cls/epoch_100num_2048chunk_1.pth.tar
+    ckpt_path: ${PROJECT_ROOT}/weights/VQFC/DINOv2/cls/epoch_100num_2048chunk_1.pth.tar
 
 allow_heads:
   - imagenet_cls_giant_last1

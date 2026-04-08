@@ -10,9 +10,9 @@ PROJECT_ROOT = os.getenv("PROJECT_ROOT")
 class Dinov2DatasetTrain(Dataset):
     def __init__(self, train=True):
         if train:
-            data_dir = [f"{PROJECT_ROOT}/features/fcvq/cls/train"]
+            data_dir = [f"{PROJECT_ROOT}/features/vqfc/cls/train"]
         else:
-            data_dir = [f"{PROJECT_ROOT}/features/fcvq/cls/test"]
+            data_dir = [f"{PROJECT_ROOT}/features/vqfc/cls/test"]
 
         self.data_dir = data_dir
         self.file_list = []

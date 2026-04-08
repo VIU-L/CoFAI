@@ -558,15 +558,15 @@ if __name__ == "__main__":
 
 
 """ example usage for slide inference VQFC feature coding:
-CUDA_VISIBLE_DEVICES=0 python examples/fcvq/run_eval_slide.py \
-    --config examples/fcvq/config/eval_base.yaml examples/fcvq/config/dino_orig_slide_giant_seg_fcvq_64.yaml \
+CUDA_VISIBLE_DEVICES=0 python examples/vqfc/run_eval_slide.py \
+    --config examples/vqfc/config/eval_base.yaml examples/vqfc/config/dino_orig_slide_giant_seg_vqfc_64.yaml \
     --preset voc2012_sel20_seg \
     --head voc2012_seg_giant_last1 \
     --quality 1.0 \
     --cuda --output_dir eval_test --real
 
-CUDA_VISIBLE_DEVICES=0 python examples/fcvq/run_eval_slide.py \
-      --config examples/fcvq/config/eval_base.yaml examples/fcvq/config/dino_orig_slide_giant_cls_fcvq_512.yaml \
+CUDA_VISIBLE_DEVICES=0 python examples/vqfc/run_eval_slide.py \
+      --config examples/vqfc/config/eval_base.yaml examples/vqfc/config/dino_orig_slide_giant_cls_vqfc_512.yaml \
       --preset imagenet_sel100_cls \
       --head imagenet_cls_giant_last1 \
       --quality 1.0 \

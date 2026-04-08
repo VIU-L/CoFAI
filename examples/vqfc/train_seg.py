@@ -7,7 +7,7 @@ import torch
 from torch.utils.tensorboard import SummaryWriter
 from torch.optim.lr_scheduler import StepLR
 from dataset_seg import Dinov2DatasetTrain
-from cofai.models.fcvq import Dinov2FCVQCodec
+from cofai.models.vqfc import Dinov2VQFCCodec
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -26,7 +26,7 @@ def parse_args(argv):
     p.add_argument("--checkpoint", type=str, default="/output/")
     p.add_argument("--save", action="store_true", default=True)
 
-    # fcvq
+    # vqfc
     p.add_argument("--embedding_dim", type=int, default=10)
     p.add_argument("--num_embeddings", type=int, default=32)
     p.add_argument("--num_chunks", type=int, default=32)
@@ -34,7 +34,7 @@ def parse_args(argv):
 
     # validate (seg eval inside codec)
     p.add_argument(
-        "--list_file", type=str, default=f"{PROJECT_ROOT}/examples/fcvq/cfg/val_100.txt"
+        "--list_file", type=str, default=f"{PROJECT_ROOT}/examples/vqfc/cfg/val_100.txt"
     )
     p.add_argument("--img_root", type=str, default=f"{PROJECT_ROOT}/data/VOC2012")
     p.add_argument("--feat_dir", type=str, default=f"{PROJECT_ROOT}/features/seg/test")
@@ -65,7 +65,7 @@ def set_seed(seed: int):
     torch.backends.cudnn.benchmark = False
 
 
-def train_one_epoch(codec: Dinov2FCVQCodec, loader, optimizer, epoch: int):
+def train_one_epoch(codec: Dinov2VQFCCodec, loader, optimizer, epoch: int):
     codec.train()
     device = "cuda" if torch.cuda.is_available() else "cpu"
     codec.to(device)
@@ -93,7 +93,7 @@ def train_one_epoch(codec: Dinov2FCVQCodec, loader, optimizer, epoch: int):
 
 
 @torch.no_grad()
-def validate_epoch(codec: Dinov2FCVQCodec, args, epoch: int):
+def validate_epoch(codec: Dinov2VQFCCodec, args, epoch: int):
     # IMPORTANT: load_vq=False, evaluate current in-memory weights
     metrics = codec.seg_eval_from_feature_files(
         load_vq=False,
@@ -134,8 +134,8 @@ def main(argv):
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    codec = Dinov2FCVQCodec(
-        fcvq_kwargs=dict(
+    codec = Dinov2VQFCCodec(
+        vqfc_kwargs=dict(
             num_embeddings=args.num_embeddings,
             embedding_dim=args.embedding_dim,
             num_chunks=args.num_chunks,
@@ -151,7 +151,7 @@ def main(argv):
         num_workers=4,
     )
 
-    optimizer = torch.optim.Adam(codec.fcvq.parameters(), lr=args.lr)
+    optimizer = torch.optim.Adam(codec.vqfc.parameters(), lr=args.lr)
     scheduler = StepLR(optimizer, step_size=20, gamma=0.9)
 
     for epoch in range(1, args.epochs + 1):

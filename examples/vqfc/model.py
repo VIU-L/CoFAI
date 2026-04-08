@@ -8,7 +8,7 @@ import time
 # from torch.cuda.amp import autocast
 # from sklearn.mixture import GaussianMixture
 
-from cofai.entropy_models.fcvq_entropy import SoftmaxPrior, DiscreteEntropyModel
+from cofai.entropy_models.vqfc_entropy import SoftmaxPrior, DiscreteEntropyModel
 import math
 
 
@@ -277,7 +277,7 @@ class VectorQuantizer(nn.Module):
         return quantized_latents
 
 
-class FCVQ(BaseVAE):
+class VQFC(BaseVAE):
     def __init__(
         self,
         num_embeddings: int,
@@ -286,7 +286,7 @@ class FCVQ(BaseVAE):
         lmbda: float,
         **kwargs,
     ) -> None:
-        super(FCVQ, self).__init__()
+        super(VQFC, self).__init__()
 
         self.embedding_dim = embedding_dim
         self.num_embeddings = num_embeddings

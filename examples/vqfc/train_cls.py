@@ -6,7 +6,7 @@ import torch
 import numpy as np
 from torch.optim.lr_scheduler import StepLR
 from torch.utils.tensorboard import SummaryWriter
-from cofai.models.fcvq import Dinov2FCVQCodec
+from cofai.models.vqfc import Dinov2VQFCCodec
 from dataset_cls import Dinov2DatasetTrain
 from tqdm import tqdm
 from dotenv import load_dotenv
@@ -61,9 +61,9 @@ def validate_epoch(epoch, loss_functioner, codec):
     eval_mse = 0.0
     eval_rate = 0.0
 
-    raw_dir = f"{PROJECT_ROOT}/features/fcvq/cls/test"
+    raw_dir = f"{PROJECT_ROOT}/features/vqfc/cls/test"
     with open(
-        f"{PROJECT_ROOT}/examples/fcvq/cfg/imagenet_selected_label500.txt", "r"
+        f"{PROJECT_ROOT}/examples/vqfc/cfg/imagenet_selected_label500.txt", "r"
     ) as f:
         data = f.readlines()
 
@@ -138,7 +138,7 @@ def parse_args(argv):
     parser.add_argument("--save", action="store_true", default=True)
     parser.add_argument("--seed", type=int, default=3407)
     parser.add_argument(
-        "--checkpoint", type=str, default=f"{PROJECT_ROOT}/runs/fcvq/cls/"
+        "--checkpoint", type=str, default=f"{PROJECT_ROOT}/runs/vqfc/cls/"
     )
     parser.add_argument("--embedding_dim", type=int, default=32)
     parser.add_argument("--num_embeddings", type=int, default=2)
@@ -165,8 +165,8 @@ def main(argv):
 
     device = "cuda"
 
-    codec = Dinov2FCVQCodec(
-        fcvq_kwargs=dict(
+    codec = Dinov2VQFCCodec(
+        vqfc_kwargs=dict(
             num_embeddings=args.num_embeddings,
             embedding_dim=args.embedding_dim,
             num_chunks=args.num_chunks,
@@ -186,7 +186,7 @@ def main(argv):
         pin_memory=True,
     )
 
-    optimizer = torch.optim.Adam(codec.fcvq.parameters(), lr=args.lr)
+    optimizer = torch.optim.Adam(codec.vqfc.parameters(), lr=args.lr)
     train_scheduler = StepLR(optimizer, step_size=10, gamma=0.5)
     loss_functioner = torch.nn.MSELoss()
 
