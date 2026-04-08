@@ -1,5 +1,5 @@
 """
-FCVQ entropy model: Softmax prior and discrete entropy coding.
+VQFC entropy model: Softmax prior and discrete entropy coding.
 
 Reference:
     [1] https://github.com/InterDigitalInc/CompressAI/blob/master/compressai/entropy_models/entropy_models.py

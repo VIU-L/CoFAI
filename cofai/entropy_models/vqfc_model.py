@@ -7,7 +7,7 @@ from abc import abstractmethod
 import time
 from einops import rearrange
 
-from .fcvq_entropy import SoftmaxPrior, DiscreteEntropyModel
+from .vqfc_entropy import SoftmaxPrior, DiscreteEntropyModel
 import math
 
 
@@ -262,7 +262,7 @@ class VectorQuantizer(nn.Module):
         return quantized_latents
 
 
-class FCVQ(BaseVAE):
+class VQFC(BaseVAE):
     def __init__(
         self,
         num_embeddings: int,
@@ -272,7 +272,7 @@ class FCVQ(BaseVAE):
         ckpt_path: str = None,
         **kwargs,
     ) -> None:
-        super(FCVQ, self).__init__()
+        super(VQFC, self).__init__()
 
         self.embedding_dim = embedding_dim
         self.num_embeddings = num_embeddings

@@ -15,7 +15,7 @@ from einops import rearrange
 
 from cofai.backbone.base import Dinov2TimmBackbone, Dinov2OrgBackbone
 from cofai.latent_codecs.vtm import VtmFeatureCodec
-from cofai.entropy_models.fcvq_model import FCVQ
+from cofai.entropy_models.vqfc_model import VQFC
 
 
 @register_model("Dinov2TimmPatchCodec")
@@ -419,23 +419,23 @@ class Dinov2OrigSlideOnlyPatchCodec(CompressionModel):
         return task_feats
 
 
-@register_model("Dinov2OrigSlideSegFCVQ")
-class Dinov2OrigSlideSegFCVQ(CompressionModel):
+@register_model("Dinov2OrigSlideSegVQFC")
+class Dinov2OrigSlideSegVQFC(CompressionModel):
     """
-    DINOv2-Original backbone with sliding window + FCVQ compression for Segmentation.
+    DINOv2-Original backbone with sliding window + VQFC compression for Segmentation.
 
-    This model combines Dinov2OrgBackbone (slide encode) with FCVQ codec
+    This model combines Dinov2OrgBackbone (slide encode) with VQFC codec
     for feature compression on segmentation tasks.
 
     Args:
         slide_size (list of int): Size of each sliding window patch [height, width].
         slide_stride (list of int): Stride for sliding window [height_stride, width_stride].
         dino_backbone (dict): Configuration for Dinov2OrgBackbone.
-        fcvq_codec (dict): Configuration for FCVQ codec.
+        vqfc_codec (dict): Configuration for VQFC codec.
 
     Attributes:
         dino (Dinov2OrgBackbone): The DINOv2 backbone.
-        fcvq (FCVQ): The FCVQ codec.
+        vqfc (VQFC): The VQFC codec.
     """
 
     def __init__(
@@ -443,7 +443,7 @@ class Dinov2OrigSlideSegFCVQ(CompressionModel):
         slide_size=[518, 518],
         slide_stride=[259, 259],
         dino_backbone={},
-        fcvq_codec={},
+        vqfc_codec={},
         **kwargs,
     ):
         super().__init__()
@@ -455,15 +455,15 @@ class Dinov2OrigSlideSegFCVQ(CompressionModel):
         self.slide_size = slide_size
         self.slide_stride = slide_stride
 
-        self.fcvq = FCVQ(**fcvq_codec)
-        if hasattr(self.fcvq, "uncondi_entropy_model"):
-            self.fcvq.uncondi_entropy_model.get_ready_for_compression()
+        self.vqfc = VQFC(**vqfc_codec)
+        if hasattr(self.vqfc, "uncondi_entropy_model"):
+            self.vqfc.uncondi_entropy_model.get_ready_for_compression()
 
     def forward(self, x):
         raise NotImplementedError("This model is for inference only.")
 
     def forward_test(self, x, qp=None, tasks=[], **kwargs):
-        """Forward pass with FCVQ compression for segmentation."""
+        """Forward pass with VQFC compression for segmentation."""
         # Extract features using slide_encode
         h_dino_list = self.dino.slide_encode(x, self.slide_size, self.slide_stride)
         # [['tensor: (1, 1370, 1536)'], ['tensor: (1, 1370, 1536)']]
@@ -471,7 +471,7 @@ class Dinov2OrigSlideSegFCVQ(CompressionModel):
         # (N_crop, N_layer, H*W+1, C)
         stacked_feat = torch.stack(org_feature_list)  # [2, 1, 1370, 1536]
         patch_tokens = stacked_feat[:, :, 1:, :]  # [2, 1, 1369, 1536]
-        patch_tokens_hat, mse_loss, strings, encoding_inds = self.fcvq.compress(
+        patch_tokens_hat, mse_loss, strings, encoding_inds = self.vqfc.compress(
             patch_tokens
         )
         cls_token_hat = torch.zeros_like(stacked_feat[:, :, 0:1, :])  # [2, 1, 1, 1536]
@@ -493,7 +493,7 @@ class Dinov2OrigSlideSegFCVQ(CompressionModel):
             task_feats["seg"] = self.dino.slide_decode_seg(h_dino_hat_list, slide_res)
 
         coded_data = {
-            "strings": {"fcvq": [strings]},
+            "strings": {"vqfc": [strings]},
             "pstate": {"feat_shape": patch_tokens.shape},
         }
         return coded_data, task_feats
@@ -519,10 +519,10 @@ class Dinov2OrigSlideSegFCVQ(CompressionModel):
 
     def compress(self, x, qp=None):
         """
-        Compress input image to byte strings using sliding window + FCVQ.
+        Compress input image to byte strings using sliding window + VQFC.
 
-        Extracts features via slide_encode, compresses patch tokens with FCVQ,
-        and returns coded_unit. The qp parameter is unused (FCVQ has no QP).
+        Extracts features via slide_encode, compresses patch tokens with VQFC,
+        and returns coded_unit. The qp parameter is unused (VQFC has no QP).
 
         Args:
             x (torch.Tensor): Input image tensor of shape (B, C, H, W).
@@ -530,7 +530,7 @@ class Dinov2OrigSlideSegFCVQ(CompressionModel):
 
         Returns:
             coded_unit (dict): Dictionary containing:
-                - "strings": {"vtm": [strings]} where strings is list of bytes from FCVQ
+                - "strings": {"vtm": [strings]} where strings is list of bytes from VQFC
                 - "pstate": {"feat_shape": stacked_feat_hat.shape}
         """
         with torch.inference_mode():
@@ -538,11 +538,11 @@ class Dinov2OrigSlideSegFCVQ(CompressionModel):
             org_feature_list = [torch.cat(feature_list) for feature_list in h_dino_list]
             stacked_feat = torch.stack(org_feature_list)
             patch_tokens = stacked_feat[:, :, 1:, :]
-            patch_tokens_hat, mse_loss, strings, encoding_inds = self.fcvq.compress(
+            patch_tokens_hat, mse_loss, strings, encoding_inds = self.vqfc.compress(
                 patch_tokens
             )
             coded_unit = {
-                "strings": {"fcvq": [strings]},
+                "strings": {"vqfc": [strings]},
                 "pstate": {"feat_shape": tuple(patch_tokens.shape)},
             }
             return coded_unit
@@ -553,7 +553,7 @@ class Dinov2OrigSlideSegFCVQ(CompressionModel):
 
         Args:
             coded_unit (dict): Dictionary containing:
-                - "strings": {"fcvq": [strings]} from compress
+                - "strings": {"vqfc": [strings]} from compress
                 - "pstate": {"feat_shape": tuple}
             tasks (list of str): List of tasks. Supported: "seg".
             **kwargs: Additional arguments (unused).
@@ -561,12 +561,12 @@ class Dinov2OrigSlideSegFCVQ(CompressionModel):
         Returns:
             task_feats (dict): Dictionary with "seg" key if "seg" in tasks.
         """
-        strings = coded_unit["strings"]["fcvq"][0]
+        strings = coded_unit["strings"]["vqfc"][0]
         shape = coded_unit["pstate"]["feat_shape"]
-        # feat_shape is (N_crop, N_layer, H*W, C); FCVQ decompress needs the temp shape
+        # feat_shape is (N_crop, N_layer, H*W, C); VQFC decompress needs the temp shape
         tmp_shape = (shape[0] * shape[1], shape[2], shape[3])
 
-        patch_tokens_hat = self.fcvq.decompress(strings, tmp_shape)
+        patch_tokens_hat = self.vqfc.decompress(strings, tmp_shape)
         patch_tokens_hat = patch_tokens_hat.reshape(
             shape[0], shape[1], shape[2], shape[3]
         )
@@ -601,27 +601,27 @@ class Dinov2OrigSlideSegFCVQ(CompressionModel):
         return task_feats
 
 
-@register_model("Dinov2OrigClsFCVQ")
-class Dinov2OrigClsFCVQ(CompressionModel):
+@register_model("Dinov2OrigClsVQFC")
+class Dinov2OrigClsVQFC(CompressionModel):
     """
-    DINOv2-Original backbone with sliding window + FCVQ compression for Classification.
+    DINOv2-Original backbone with sliding window + VQFC compression for Classification.
 
-    This model combines Dinov2OrgBackbone with FCVQ codec
+    This model combines Dinov2OrgBackbone with VQFC codec
     for feature compression on classification tasks.
 
     Args:
         dino_backbone (dict): Configuration for Dinov2OrgBackbone.
-        fcvq_codec (dict): Configuration for FCVQ codec.
+        vqfc_codec (dict): Configuration for VQFC codec.
 
     Attributes:
         dino (Dinov2OrgBackbone): The DINOv2 backbone.
-        fcvq (FCVQ): The FCVQ codec.
+        vqfc (VQFC): The VQFC codec.
     """
 
     def __init__(
         self,
         dino_backbone={},
-        fcvq_codec={},
+        vqfc_codec={},
         **kwargs,
     ):
         super().__init__()
@@ -630,37 +630,37 @@ class Dinov2OrigClsFCVQ(CompressionModel):
         self.patch_size = self.dino.patch_size
         self.img_size = self.dino.img_size
 
-        self.fcvq = FCVQ(**fcvq_codec)
-        if hasattr(self.fcvq, "uncondi_entropy_model"):
-            self.fcvq.uncondi_entropy_model.get_ready_for_compression()
+        self.vqfc = VQFC(**vqfc_codec)
+        if hasattr(self.vqfc, "uncondi_entropy_model"):
+            self.vqfc.uncondi_entropy_model.get_ready_for_compression()
 
     def forward(self, x):
         raise NotImplementedError("This model is for inference only.")
 
     def forward_test(self, x, qp=None, tasks=[], **kwargs):
-        """Forward pass with FCVQ compression for classification."""
+        """Forward pass with VQFC compression for classification."""
         # Extract features
         h_dino = self.dino.encode(x)  # (B, 1+HW, C)
 
         task_feats = {}
         if "cls" in tasks:
-            h_dino_hat, mse_loss, strings, encoding_inds = self.fcvq.compress(h_dino)
+            h_dino_hat, mse_loss, strings, encoding_inds = self.vqfc.compress(h_dino)
             cls_features = self.dino.decode_cls(h_dino_hat)
             task_feats["cls"] = cls_features
 
         # Return mock coded_data
         coded_data = {
-            "strings": {"fcvq": [strings]},
+            "strings": {"vqfc": [strings]},
             "pstate": {"feat_shape": h_dino.shape},
         }
         return coded_data, task_feats
 
     def compress(self, x, qp=None):
         """
-        Compress input image to byte strings using FCVQ for classification.
+        Compress input image to byte strings using VQFC for classification.
 
-        Extracts features via encode, compresses with FCVQ, returns coded_unit.
-        The qp parameter is unused (FCVQ has no QP).
+        Extracts features via encode, compresses with VQFC, returns coded_unit.
+        The qp parameter is unused (VQFC has no QP).
 
         Args:
             x (torch.Tensor): Input image tensor of shape (B, C, H, W).
@@ -668,14 +668,14 @@ class Dinov2OrigClsFCVQ(CompressionModel):
 
         Returns:
             coded_unit (dict): Dictionary containing:
-                - "strings": {"fcvq": [strings]}
+                - "strings": {"vqfc": [strings]}
                 - "pstate": {"feat_shape": tuple}
         """
         with torch.inference_mode():
             h_dino = self.dino.encode(x)
-            h_dino_hat, mse_loss, strings, encoding_inds = self.fcvq.compress(h_dino)
+            h_dino_hat, mse_loss, strings, encoding_inds = self.vqfc.compress(h_dino)
             coded_unit = {
-                "strings": {"fcvq": [strings]},
+                "strings": {"vqfc": [strings]},
                 "pstate": {
                     "feat_shape": tuple(h_dino.shape),
                 },
@@ -693,7 +693,7 @@ class Dinov2OrigClsFCVQ(CompressionModel):
 
         Args:
             coded_unit (dict): Dictionary containing:
-                - "strings": {"fcvq": [strings]} from compress
+                - "strings": {"vqfc": [strings]} from compress
                 - "pstate": {"feat_shape": tuple}
             tasks (list of str): List of tasks. Supported: "cls".
             **kwargs: Additional arguments (unused).
@@ -701,10 +701,10 @@ class Dinov2OrigClsFCVQ(CompressionModel):
         Returns:
             task_feats (dict): Dictionary with "cls" key if "cls" in tasks.
         """
-        strings = coded_unit["strings"]["fcvq"][0]
+        strings = coded_unit["strings"]["vqfc"][0]
         feat_shape = coded_unit["pstate"]["feat_shape"]
 
-        h_dino_hat = self.fcvq.decompress(strings, feat_shape)
+        h_dino_hat = self.vqfc.decompress(strings, feat_shape)
         device = next(self.parameters()).device
         h_dino_hat = h_dino_hat.to(device)
 
