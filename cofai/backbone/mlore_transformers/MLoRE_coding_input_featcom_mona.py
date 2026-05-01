@@ -25,7 +25,7 @@ import torch.nn.functional as F
 import itertools
 from timm.data import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, IMAGENET_INCEPTION_MEAN, IMAGENET_INCEPTION_STD
 from timm.models.helpers import build_model_with_cfg, named_apply, adapt_input_conv
-from timm.models.layers import PatchEmbed, Mlp, DropPath, trunc_normal_, lecun_normal_
+from timm.layers import PatchEmbed, Mlp, DropPath, trunc_normal_, lecun_normal_
 from cofai.backbone.mlore_transformers.attention import SATransformerBlock
 import numpy as np
 from einops import rearrange as o_rearrange
