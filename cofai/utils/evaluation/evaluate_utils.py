@@ -7,7 +7,7 @@ import numpy as np
 import json
 import torch
 import scipy.io as sio
-from utils.utils import get_output
+from cofai.engine.run_eval import task_decode_pred
 # from detection_toolbox.det_tools import bbox2json, bbox2fig
 
 class PerformanceMeter(object):
@@ -78,9 +78,9 @@ def save_model_pred_for_one_task(p, batch_idx, sample, output, save_dirs, task=N
     inputs, meta = sample['image'].cuda(non_blocking=True), sample['meta']
 
     if task == 'semseg':
-        output_task = get_output(output[task], task).cpu().data.numpy()
+        output_task = task_decode_pred(output[task], task).cpu().data.numpy()
     else:
-        output_task = get_output(output[task], task)#.cpu().data.numpy()
+        output_task = task_decode_pred(output[task], task)#.cpu().data.numpy()
 
     for jj in range(int(inputs.size()[0])):
         if len(sample[task][jj].unique()) == 1 and sample[task][jj].unique() == p.ignore_index:

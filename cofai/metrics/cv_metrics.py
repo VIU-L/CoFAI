@@ -1,6 +1,7 @@
-from typing import List, Dict
-import torch
+from typing import Dict, List
+
 import numpy as np
+import torch
 
 
 class TopKAccuracyMetric:
@@ -30,6 +31,10 @@ class TopKAccuracyMetric:
                 inner list contains class indices sorted by confidence (highest first).
             targets (List[int]): List of ground truth class indices.
         """
+        if not isinstance(targets, (list, tuple)):
+            targets = [targets]
+        if predictions and isinstance(predictions[0], int):
+            predictions = [predictions]
         for pred, target in zip(predictions, targets):
             for k in self.topk:
                 if target in pred[:k]:

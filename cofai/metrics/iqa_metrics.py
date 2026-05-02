@@ -1,20 +1,27 @@
-"""Metrics factory and lightweight cached accessors (no third-party cache).
+"""Metrics factory and unified-eval meters for IQA.
 
 This module provides lazy instantiation of image quality assessment (IQA) metrics
 to avoid instantiating all metrics at import time. Metrics are created on-demand
 and cached using a simple module-level dictionary for reuse.
+
+It also provides unified-eval meters with a minimal interface:
+  - update(pred, gt) -> None
+  - compute() -> Dict[str, float]
 """
 
 import os
+import tempfile
 from collections import defaultdict
-from typing import Dict, Callable, Union, Tuple
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any, Dict, Callable, List, Optional, Union, Tuple
 
 import torch
 import torch.nn.functional as F
 import torchvision
 from torchvision.transforms import ToTensor, ToPILImage
 import pyiqa
-import clip
+# import clip  # 暂时禁用：openai-clip 依赖 pkg_resources，部分环境缺失时会导入失败
 from PIL import Image
 import lpips
 import numpy as np
@@ -29,6 +36,168 @@ DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 _METRIC_FUNC_CACHE: Dict[str, Callable] = {}
 _lpips_ours_model = None  # lazy cache
 _det_model_cache: Dict[str, torch.nn.Module] = {}
+
+def _to_nchw01(x: Any) -> Optional[torch.Tensor]:
+    """Best-effort normalize to float32 NCHW RGB in [0,1].
+
+    Accepts:
+    - torch.Tensor: CHW or NCHW (also heuristically supports HWC/NHWC when last dim is 3)
+    - numpy.ndarray: HWC or CHW
+    """
+    if x is None:
+        return None
+    if isinstance(x, torch.Tensor):
+        t = x
+    elif isinstance(x, np.ndarray):
+        t = torch.from_numpy(x)
+    else:
+        return None
+
+    # Upgrade to 4D
+    if t.dim() == 3:
+        # CHW or HWC
+        if t.shape[-1] == 3 and t.shape[0] != 3:
+            t = t.permute(2, 0, 1)  # HWC -> CHW
+        t = t.unsqueeze(0)  # -> NCHW
+    elif t.dim() == 4:
+        # NCHW or NHWC
+        if t.shape[-1] == 3 and t.shape[1] != 3:
+            t = t.permute(0, 3, 1, 2)  # NHWC -> NCHW
+    else:
+        return None
+
+    if int(t.shape[1]) != 3:
+        return None
+
+    t = t.detach().float()
+    if t.numel() == 0:
+        return None
+
+    # If looks like [0,255], rescale.
+    mx = float(t.max().item())
+    if mx > 1.5:
+        t = t / 255.0
+    return t.clamp(0.0, 1.0)
+
+def _save_png(x_nchw01: torch.Tensor, path: str) -> None:
+    """Save a single image tensor (NCHW in [0,1]) to PNG."""
+    img = x_nchw01[0].detach().cpu().clamp(0, 1)  # CHW
+    pil = ToPILImage()(img)
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    pil.save(path)
+
+@dataclass
+class IQAPerSampleMeter:
+    """Per-sample IQA meter (averages over seen pairs).
+
+    Args:
+        metrics: names passed to `create_img_metrics`, e.g. ["PSNR", "MS-SSIM", "LPIPS-Ours"].
+        device: device for heavy metrics (pyiqa/lpips).
+    """
+
+    metrics: List[str] = field(default_factory=lambda: ["PSNR", "MS-SSIM"])
+    device: str = field(default_factory=lambda: str(DEVICE))
+    _metric_funcs: Dict[str, Callable] = field(default_factory=dict, init=False, repr=False)
+    _sums: Dict[str, float] = field(default_factory=dict, init=False, repr=False)
+    _n: int = field(default=0, init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        self.metrics = [str(m) for m in (self.metrics or [])]
+        # Bind global DEVICE for pyiqa-created metrics. We keep existing caching behavior.
+        self._metric_funcs = create_img_metrics(self.metrics)
+        self._sums = {name: 0.0 for name in self.metrics}
+
+    def update(self, pred: Any, gt: Any) -> None:
+        p = _to_nchw01(pred)
+        g = _to_nchw01(gt)
+        if p is None or g is None:
+            return
+        if p.shape != g.shape:
+            return
+        bs = int(p.size(0))
+        for i in range(bs):
+            pi = p[i : i + 1].to(DEVICE)
+            gi = g[i : i + 1].to(DEVICE)
+            for name, func in self._metric_funcs.items():
+                try:
+                    v = func(pi, gi)
+                    if isinstance(v, torch.Tensor):
+                        v = float(v.detach().cpu().item())
+                    else:
+                        v = float(v)
+                    self._sums[name] += v
+                except Exception:
+                    # If one metric fails for a sample, skip it without breaking eval.
+                    continue
+            self._n += 1
+
+    def compute(self) -> Dict[str, float]:
+        if self._n <= 0:
+            return {}
+        return {name: (self._sums[name] / float(self._n)) for name in self.metrics}
+
+@dataclass
+class IQADistributionMeter:
+    """Distribution-distance IQA meter (stores pairs to disk, computes on folders).
+
+    Typical usage: FID between reconstructed images (pred) and GT images.
+
+    Args:
+        metrics: names passed to `create_dist_metrics`, default ["FID"].
+        tmp_root: optional root dir for temporary storage (defaults to system temp).
+        keep_dir: whether to keep the directory after compute() for debugging.
+    """
+
+    metrics: List[str] = field(default_factory=lambda: ["FID"])
+    tmp_root: Optional[str] = None
+    keep_dir: bool = False
+    _tmp: Optional[tempfile.TemporaryDirectory] = field(default=None, init=False, repr=False)
+    _pred_dir: Optional[str] = field(default=None, init=False, repr=False)
+    _gt_dir: Optional[str] = field(default=None, init=False, repr=False)
+    _metric_funcs: Dict[str, Callable] = field(default_factory=dict, init=False, repr=False)
+    _idx: int = field(default=0, init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        self.metrics = [str(m) for m in (self.metrics or [])]
+        self._metric_funcs = create_dist_metrics(self.metrics)
+        self._tmp = tempfile.TemporaryDirectory(dir=self.tmp_root)
+        root = self._tmp.name
+        self._pred_dir = str(Path(root) / "pred")
+        self._gt_dir = str(Path(root) / "gt")
+
+    def update(self, pred: Any, gt: Any) -> None:
+        p = _to_nchw01(pred)
+        g = _to_nchw01(gt)
+        if p is None or g is None:
+            return
+        if p.shape != g.shape:
+            return
+        bs = int(p.size(0))
+        assert self._pred_dir is not None and self._gt_dir is not None
+        for i in range(bs):
+            name = f"{self._idx:08d}.png"
+            _save_png(p[i : i + 1], str(Path(self._pred_dir) / name))
+            _save_png(g[i : i + 1], str(Path(self._gt_dir) / name))
+            self._idx += 1
+
+    def compute(self) -> Dict[str, float]:
+        if self._idx <= 0:
+            return {}
+        assert self._pred_dir is not None and self._gt_dir is not None
+        out: Dict[str, float] = {}
+        for name, func in self._metric_funcs.items():
+            try:
+                v = func(self._pred_dir, self._gt_dir)
+                if isinstance(v, torch.Tensor):
+                    # some pyiqa metrics return tensor([x])
+                    v = float(v.detach().cpu().reshape(-1)[0].item())
+                out[name] = float(v)
+            except Exception:
+                continue
+        if not self.keep_dir and self._tmp is not None:
+            self._tmp.cleanup()
+            self._tmp = None
+        return out
 
 def _tag_metric(func: Callable, scope: str) -> Callable:
     func._metric_scope = scope
@@ -90,24 +259,33 @@ def create_clip_sim_metric(name: str = "ViT-B/32") -> Callable:
                      img2_obj: Union[str, torch.Tensor]) -> torch.Tensor
             Returns cosine similarity between CLIP-encoded image features.
     """
-    model, preprocess = clip.load(name, device=DEVICE)
+    # model, preprocess = clip.load(name, device=DEVICE)
+    #
+    # def clip_sim(
+    #     img1_obj: Union[str, torch.Tensor], img2_obj: Union[str, torch.Tensor]
+    # ) -> torch.Tensor:
+    #     if isinstance(img1_obj, str):
+    #         img1 = preprocess(Image.open(img1_obj)).unsqueeze(0).to(DEVICE)
+    #         img2 = preprocess(Image.open(img2_obj)).unsqueeze(0).to(DEVICE)
+    #     else:
+    #         img1 = preprocess(tensor2image(img1_obj)).unsqueeze(0).to(DEVICE)
+    #         img2 = preprocess(tensor2image(img2_obj)).unsqueeze(0).to(DEVICE)
+    #
+    #     with torch.no_grad():
+    #         f1 = model.encode_image(img1)
+    #         f2 = model.encode_image(img2)
+    #         return torch.nn.functional.cosine_similarity(f1, f2, dim=-1)
+    #
+    # return clip_sim
 
-    def clip_sim(
+    def clip_sim_disabled(
         img1_obj: Union[str, torch.Tensor], img2_obj: Union[str, torch.Tensor]
     ) -> torch.Tensor:
-        if isinstance(img1_obj, str):
-            img1 = preprocess(Image.open(img1_obj)).unsqueeze(0).to(DEVICE)
-            img2 = preprocess(Image.open(img2_obj)).unsqueeze(0).to(DEVICE)
-        else:
-            img1 = preprocess(tensor2image(img1_obj)).unsqueeze(0).to(DEVICE)
-            img2 = preprocess(tensor2image(img2_obj)).unsqueeze(0).to(DEVICE)
+        raise RuntimeError(
+            "CLIP-SIM 已暂时禁用：请恢复 iqa_metrics 中的 `import clip` 与 create_clip_sim_metric 实现。"
+        )
 
-        with torch.no_grad():
-            f1 = model.encode_image(img1)
-            f2 = model.encode_image(img2)
-            return torch.nn.functional.cosine_similarity(f1, f2, dim=-1)
-
-    return clip_sim
+    return clip_sim_disabled
 
 # MS-SSIM related metrics
 # Global MS-SSIM metric instance for reuse
