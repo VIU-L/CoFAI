@@ -1,0 +1,40 @@
+# @package _global_
+defaults:
+  - /args: default
+  - /dataloader: default
+  - /data: voc2012_val
+  - /heads: dinov2_head
+  - _self_
+
+name: voc2012-val--Bypass-dinov2-small-last4
+description: "data: VOC2012 val; model: Bypass-dinov2-small-last4; task: segmentation"
+dataset: ${datasets.voc2012_val}
+test_transforms:
+  - type: cofai.transforms.PadImage
+    size: 512
+    keys: [img, semseg]
+  - type: cofai.transforms.PadToMultiple
+    multiple: 16
+    keys: [img, semseg]
+  - type: cofai.transforms.AddIgnoreRegions
+  - type: cofai.transforms.ToTensor
+    keys: [img, semseg]
+collate:
+  mode: stack_only
+task_configs:
+  - label: semseg
+    meter:
+      type: MeanIoUMetric
+      num_classes: 21
+model:
+  type: Dinov2TimmBypass
+  dino_backbone:
+    model_size: small
+    img_size: 512
+    patch_size: 16
+    dynamic_size: true
+    slot: -3
+    n_last_blocks: 4
+    with_registers: false
+  heads:
+    semseg: ${heads.voc2012_seg_small_last4}

@@ -1,0 +1,20 @@
+# @package _global_
+metrics:
+  subjective_metrics:
+    type: subjective_metrics
+    img_metrics:
+      - "PSNR"
+      - "MS-SSIM"
+      - "VIF"
+      - "GMSD"
+      - "LPIPS-Alex"
+      - "LPIPS-VGG"
+      - "DISTS"
+      - "PieAPP"
+      - "AHIQ"
+      - "TOPIQ-FR"
+      - "TOPIQ-NR"
+      - "MUSIQ"
+    dist_metrics:
+      - "FID"
+

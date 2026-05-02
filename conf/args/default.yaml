@@ -1,0 +1,13 @@
+# @package _global_
+args:
+  cuda: true
+  real: true
+  logs: true
+  verbose: false
+  profile: false
+  device: cpu
+  output_dir: ""
+  quality: 0
+  max_samples: null
+  multi_run: false
+

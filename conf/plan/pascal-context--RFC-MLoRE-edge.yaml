@@ -1,0 +1,51 @@
+# @package _global_
+defaults:
+  - /args: default
+  - /dataloader: default
+  - /data: pascal_context
+  - _self_
+
+name: pascal-context--RFC-MLoRE-edge
+description: "data: Pascal Context; model: RFC + MLoRE ViT + edge decoder; task: edge detection"
+dataset:
+  type: PASCALContextDataset
+  root: ${PROJECT_ROOT}/data/PASCALContext
+  split: val
+  tasks: [edge]
+  download: false
+test_transforms:
+  - type: cofai.transforms.Normalize
+    mean: [0.485, 0.456, 0.406]
+    std: [0.229, 0.224, 0.225]
+  - type: cofai.transforms.PadImage
+    size: [512, 512]
+    keys: [img, edge]
+  - type: cofai.transforms.SetImageAsOriginal
+  - type: cofai.transforms.AddIgnoreRegions
+  - type: cofai.transforms.ToTensor
+    keys: [img, edge]
+collate:
+  mode: pad_to_batch_max
+task_configs:
+  - label: edge
+    meter:
+      type: cofai.metrics.edge_detect.EdgeDetectionMeter
+      pos_weight: ${oc.select:edge_w,0.95}
+      ignore_index: ${oc.select:ignore_index,255}
+model:
+  type: MLoREFrameCodec
+  stage: stage2
+  pretrained: true
+  img_size: [512, 512]
+  drop_path_rate: 0.15
+  final_embed_dim: 640
+  rank_list: [64, 72, 80, 88, 96, 128, 128, 160, 192, 224, 256, 256, 256, 288, 320]
+  spe_rank: 64
+  topk: 9
+  pre_softmax: false
+  checkpoint: ${PROJECT_ROOT}/weights/rfc/edge-ckpt.pth.tar
+  real: ${args.real}
+  tasks:
+    NAMES: [edge]
+    NUM_OUTPUT:
+      edge: 1

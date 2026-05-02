@@ -1,0 +1,6 @@
+# @package _global_
+dataloader:
+  batch_size: 1
+  shuffle: false
+  num_workers: 2
+  pin_memory: true

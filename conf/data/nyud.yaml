@@ -1,0 +1,16 @@
+# @package _global_
+# MLoRE datasets: NYUD (no dataset.transform; use plan.test_transforms)
+datasets:
+  nyud_val:
+    type: NYUDDataset
+    root: ${PROJECT_ROOT}/data/NYUD_MT
+    split: val
+    tasks: [semseg, edge, normals, depth, scene]
+    download: false
+
+  nyud_train:
+    type: NYUDDataset
+    root: ${PROJECT_ROOT}/data/NYUD_MT
+    split: train
+    tasks: [semseg, edge, normals, depth, scene]
+    download: false

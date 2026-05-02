@@ -1,0 +1,9 @@
+# @package _global_
+datasets:
+  ade20k_val:
+    type: SegmentationDataset
+    root: ${PROJECT_ROOT}
+    img_path: data/ADEChallengeData2016/images/validation
+    seg_map_path: data/ADEChallengeData2016/annotations/validation
+    file_list: null
+    reduce_zero_label: true

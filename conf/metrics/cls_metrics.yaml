@@ -1,0 +1,6 @@
+# @package _global_
+metrics:
+  cls_metrics:
+    type: TopKAccuracyMetric
+    topk: [1, 5]
+

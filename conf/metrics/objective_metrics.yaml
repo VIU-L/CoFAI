@@ -1,0 +1,8 @@
+# @package _global_
+metrics:
+  objective_metrics:
+    # Keep consistent with `my/evals/eval_base.yaml`
+    type: objective_metrics
+    img_metrics: ["PSNR", "MS-SSIM"]
+    dist_metrics: []
+

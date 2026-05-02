@@ -1,0 +1,13 @@
+# @package _global_
+datasets:
+  imagenet_sel2k:
+    type: ClassificationDataset
+    root: ${PROJECT_ROOT}/data/ImageNet_val_sel2k
+    split: img
+    labels_file: imagenet_val_labels.txt
+    file_list: null
+    return_dict: true
+    label_key: cls
+    # Optional; plans may `oc.merge` to e.g. `[rec]` for ImageFolder / multi-task.
+    tasks: null
+

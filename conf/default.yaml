@@ -1,0 +1,25 @@
+defaults:
+  - _self_
+# Provide PROJECT_ROOT for legacy configs that interpolate ${PROJECT_ROOT}.
+PROJECT_ROOT: ${oc.env:PROJECT_ROOT,${hydra:runtime.cwd}}
+
+args:
+  cuda: true
+  real: true
+  logs: true
+  verbose: false
+  profile: false
+  # Will be updated at runtime based on args.cuda (must exist due to struct mode)
+  device: cpu
+  output_dir: ""
+  exp: null
+  epoch: best
+  quality: "1.0"
+  recon: 2
+  # Reserved (legacy): no longer used in strict conf= entrypoint.
+  plan: ""
+  checkpoint: ""
+  max_samples: null
+  # If true and config provides `multi_run`, iterate qualities and write summary.
+  multi_run: false
+

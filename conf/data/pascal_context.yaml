@@ -1,0 +1,16 @@
+# @package _global_
+datasets:
+  pascal_context_val:
+    type: PASCALContextDataset
+    root: ${PROJECT_ROOT}/data/PASCALContext
+    split: val
+    tasks: [semseg, edge, normals, sal, human_parts]
+    download: false
+
+  pascal_context_train:
+    type: PASCALContextDataset
+    root: ${PROJECT_ROOT}/data/PASCALContext
+    split: train
+    tasks: [semseg, edge, normals, sal, human_parts]
+    download: false
+

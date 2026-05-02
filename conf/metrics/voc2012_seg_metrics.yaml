@@ -1,0 +1,6 @@
+# @package _global_
+metrics:
+  voc2012_seg_metrics:
+    type: MeanIoUMetric
+    num_classes: 21
+

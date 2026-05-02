@@ -1,0 +1,37 @@
+# @package _global_
+defaults:
+  - /args: default
+  - /dataloader: default
+  - /data: ade20k_val
+  - /heads: dinov2_head
+  - _self_
+
+name: ade20k-val--Bypass-dinov2-base-reg4-last4
+description: "data: ADE20K val; model: Bypass + DINOv2-base reg4 last4 layers + semseg decoder; task: segmentation"
+dataset: ${datasets.ade20k_val}
+test_transforms:
+  - type: cofai.transforms.PadToMultiple
+    multiple: 16
+    keys: [img, semseg]
+  - type: cofai.transforms.AddIgnoreRegions
+  - type: cofai.transforms.ToTensor
+    keys: [img, semseg]
+collate:
+  mode: stack_only
+task_configs:
+  - label: semseg
+    meter:
+      type: MeanIoUMetric
+      num_classes: 150
+model:
+  type: Dinov2TimmBypass
+  dino_backbone:
+    model_size: base
+    img_size: 512
+    patch_size: 16
+    dynamic_size: true
+    slot: -3
+    n_last_blocks: 4
+    with_registers: true
+  heads:
+    semseg: ${heads.ade20k_seg_base_reg4_last4}
