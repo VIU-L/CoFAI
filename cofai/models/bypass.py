@@ -7,9 +7,12 @@ feature extraction pipeline.
 """
 
 import torch
+import torch.nn as nn
+from typing import Any, Dict, Optional
 from compressai.registry import register_model
 from compressai.models.base import CompressionModel
 from cofai.backbone import *
+from cofai.engine.registry import instantiate_class
 
 
 @register_model("Dinov2TimmBypass")
@@ -34,11 +37,22 @@ class Dinov2TimmBypass(CompressionModel):
     def __init__(
         self,
         dino_backbone={},
+        heads: dict | None = None,
         **kwargs,
     ):
         super().__init__()
         self.dino = Dinov2TimmBackbone(**dino_backbone)
         self.patch_size = self.dino.patch_size
+        self.heads = nn.ModuleDict()
+        if heads:
+            if not isinstance(heads, dict):
+                raise TypeError("heads must be a dict mapping task -> head config")
+            for task, hcfg in heads.items():
+                if not isinstance(task, str):
+                    continue
+                if not isinstance(hcfg, dict) or "type" not in hcfg:
+                    raise ValueError(f"heads.{task} must be a dict with a 'type' field")
+                self.heads[task] = instantiate_class(hcfg)
 
     def forward_test(self, x, tasks=[], **kwargs):
         """
@@ -50,10 +64,7 @@ class Dinov2TimmBypass(CompressionModel):
 
         Args:
             x (torch.Tensor): Input image tensor of shape (B, C, H, W).
-            tasks (list of str): List of tasks to perform. Supported tasks:
-
-                - "cls": Classification task
-                - "seg": Segmentation task
+            tasks (list of str): ``cls``, ``semseg``, ``rae`` — same head rules as ``MPC_I2.forward_test``.
             **kwargs (dict): Additional keyword arguments (currently unused).
 
         Returns:
@@ -62,10 +73,7 @@ class Dinov2TimmBypass(CompressionModel):
                 - "strings": Dictionary with "bypass" key containing empty bytes
                 - "pstate": Dictionary with "token_res" (token resolution)
 
-            task_feats (dict): Dictionary of task-specific features
-
-                - "cls": Classification features (if "cls" in tasks)
-                - "seg": Segmentation features (if "seg" in tasks)
+            task_feats (dict): Per-task outputs when the corresponding head is configured (raw patch tokens for ``rae`` if no decoder head).
 
         """
         with torch.inference_mode():
@@ -77,9 +85,26 @@ class Dinov2TimmBypass(CompressionModel):
             )
             task_feats = {}
             if "cls" in tasks:
-                task_feats["cls"] = self.dino.decode_cls(h_dino)
-            if "seg" in tasks:
-                task_feats["seg"] = self.dino.decode_seg(h_dino, token_res)
+                feat_cls = self.dino.decode_cls(h_dino)
+                if "cls" in self.heads:
+                    task_feats["cls"] = self.heads["cls"](feat_cls)
+            if "semseg" in tasks:
+                feat_semseg = self.dino.decode_seg(h_dino, token_res)
+                if "semseg" in self.heads:
+                    task_feats["semseg"] = self.heads["semseg"].predict(
+                        feat_semseg, scale=int(self.patch_size)
+                    )
+            if "rae" in tasks:
+                feat_rae = self.dino.decode_rae(h_dino, token_res)
+                head_key = "rec" if "rec" in self.heads else ("rae" if "rae" in self.heads else None)
+                if head_key is not None:
+                    task_feats["rae"] = self.heads[head_key].predict(
+                        feat_rae,
+                        token_res=token_res,
+                        token_format="patch",
+                    )
+                else:
+                    task_feats["rae"] = feat_rae
 
             coded_unit = {
                 "strings": {"bypass": [[b""]]},  # empty bytes
