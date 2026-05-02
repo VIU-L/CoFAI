@@ -538,17 +538,25 @@ class FeatCompression(CompressionModel):
         encoder.encode_with_indexes(symbols_list, indexes_list, cdf, cdf_lengths, offsets)
         y_string = encoder.flush()
         y_strings.append(y_string)
+        y_rows = [[b] for b in y_strings]
 
-        return {"strings": [y_strings, z_strings], "shape": z.size()[-2:]}
+        return {
+            "strings": {"y": y_rows, "z": [[b] for b in z_strings]},
+            "shape": z.size()[-2:],
+        }
 
     def decompress(self, strings, shape):
-        z_hat = self.entropy_bottleneck.decompress(strings[1], shape)
+        if isinstance(strings, dict):
+            y_part, z_part = strings["y"], strings["z"]
+        else:
+            y_part, z_part = strings[0], strings[1]
+        z_hat = self.entropy_bottleneck.decompress([r[0] for r in z_part], shape)
         scales = self.h_scale_s(z_hat)
         means = self.h_mean_s(z_hat)
 
         y_shape = [z_hat.shape[2] * 4, z_hat.shape[3] * 4]
 
-        y_string = strings[0][0]
+        y_string = y_part[0][0]
         y_hat_slices = []
         cdf = self.gaussian_conditional.quantized_cdf.tolist()
         cdf_lengths = self.gaussian_conditional.cdf_length.reshape(-1).int().tolist()

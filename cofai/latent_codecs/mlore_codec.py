@@ -227,7 +227,10 @@ class MLoREFeatureCodec(CompressionModel):
         y_string = encoder.flush()
         
         return {
-            "strings": {"y": [[y_string]], "z": z_strings},
+            "strings": {
+                "y": [[y_string]],
+                "z": [[b] for b in z_strings],
+            },
             "shape": z.size()[-2:],
             "pstate": {
                 "y_shape": y_shape,
@@ -248,7 +251,9 @@ class MLoREFeatureCodec(CompressionModel):
             dict with keys:
                 - x_hat: Reconstructed features
         """
-        z_hat = self.entropy_bottleneck.decompress(strings["z"], shape)
+        z_hat = self.entropy_bottleneck.decompress(
+            [r[0] for r in strings["z"]], shape
+        )
         scales = self.h_scale_s(z_hat)
         means = self.h_mean_s(z_hat)
         
@@ -383,7 +388,10 @@ class MLoREFeatureCodecLight(CompressionModel):
         y_strings = self.gaussian_conditional.compress(y, indexes, means)
         
         return {
-            "strings": {"y": y_strings, "z": z_strings},
+            "strings": {
+                "y": [[b] for b in y_strings],
+                "z": [[b] for b in z_strings],
+            },
             "shape": z.size()[-2:],
             "pstate": {
                 "y_shape": y.shape[2:],
@@ -393,14 +401,18 @@ class MLoREFeatureCodecLight(CompressionModel):
     
     def decompress(self, strings, shape, pstate=None):
         """Decompress bitstream to features."""
-        z_hat = self.entropy_bottleneck.decompress(strings["z"], shape)
+        z_hat = self.entropy_bottleneck.decompress(
+            [r[0] for r in strings["z"]], shape
+        )
         
         params = self.h_s(z_hat)
         scales, means = params.chunk(2, dim=1)
         scales = F.relu(scales) + 0.11
         
         indexes = self.gaussian_conditional.build_indexes(scales)
-        y_hat = self.gaussian_conditional.decompress(strings["y"], indexes, means=means)
+        y_hat = self.gaussian_conditional.decompress(
+            [r[0] for r in strings["y"]], indexes, means=means
+        )
         x_hat = self.g_s(y_hat)
         
         return {"x_hat": x_hat}

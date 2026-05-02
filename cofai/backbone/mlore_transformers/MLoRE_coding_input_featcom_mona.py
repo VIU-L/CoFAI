@@ -599,10 +599,20 @@ class FeatCompression(CompressionModel):
         
         indexes = self.gaussian_conditional.build_indexes(scale)
         y_strings = self.gaussian_conditional.compress(y, indexes, means=mean)
-        return {"strings": [y_strings, z_strings], "shape": z.size()[-2:]}
+        return {
+            "strings": {
+                "y": [[b] for b in y_strings],
+                "z": [[b] for b in z_strings],
+            },
+            "shape": z.size()[-2:],
+        }
 
     def decompress(self, strings, shape):
-        z_hat = self.entropy_bottleneck.decompress(strings[1], shape)
+        if isinstance(strings, dict):
+            y_part, z_part = strings["y"], strings["z"]
+        else:
+            y_part, z_part = strings[0], strings[1]
+        z_hat = self.entropy_bottleneck.decompress([r[0] for r in z_part], shape)
         scales = self.h_scale_s(z_hat)
         means = self.h_mean_s(z_hat)
 
@@ -610,7 +620,7 @@ class FeatCompression(CompressionModel):
 
         indexes = self.gaussian_conditional.build_indexes(scales)
         y_hat = self.gaussian_conditional.decompress(
-            strings[0], indexes, means=means
+            [r[0] for r in y_part], indexes, means=means
         )
         x_hat = self.g_s(y_hat)
         return {"x_hat": x_hat}
@@ -782,7 +792,12 @@ class MLoRE(nn.Module):
                     #### real compress
                     out_enc = self.compress.compress(xx)
                     out_dec = self.compress.decompress(out_enc["strings"], out_enc["shape"])
-                    bpp_loss = (sum(len(s[0]) for s in out_enc["strings"]) * 8.0 / (xx.shape[0]*xx.shape[2]*xx.shape[3]*256))
+                    bpp_loss = sum(
+                        len(c) * 8.0
+                        for _n, rows in out_enc["strings"].items()
+                        for row in rows
+                        for c in row
+                    ) / (xx.shape[0] * xx.shape[2] * xx.shape[3] * 256)
                     mse_loss = 0.0
                     print(bpp_loss)
                     x = out_dec['x_hat']

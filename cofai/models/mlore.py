@@ -107,6 +107,12 @@ class MLoREFrameCodec(CompressionModel):
         img_size=(512, 512),
         drop_path_rate=0.15,
         device='cuda',
+        checkpoint: str | None = None,
+        real: bool = False,
+        tasks: Any = None,
+        eval_tasks: List[str] | None = None,
+        final_embed_dim: int = 640,
+        rank_list: List[int] | None = None,
         **kwargs
     ):
         super().__init__()
@@ -114,11 +120,24 @@ class MLoREFrameCodec(CompressionModel):
         # Create config if not provided
         if p is None:
             from cofai.backbone.mlore import create_mlore_config
+            tasks_cfg = tasks if isinstance(tasks, dict) else {}
+            if eval_tasks is not None:
+                task_names = list(eval_tasks)
+            else:
+                task_names = tasks_cfg.get("NAMES", ['semseg', 'edge', 'normals', 'sal', 'human_parts'])
+
             p = create_mlore_config(
-                tasks=['semseg', 'edge', 'normals', 'sal', 'human_parts'],
+                tasks=task_names,
                 stage=stage,
                 img_size=img_size,
+                final_embed_dim=final_embed_dim,
+                rank_list=rank_list,
             )
+            if "NUM_OUTPUT" in tasks_cfg:
+                try:
+                    p.TASKS.NUM_OUTPUT.update(tasks_cfg["NUM_OUTPUT"])
+                except Exception:
+                    pass
         
         self.p = p
         self.stage = stage
@@ -133,6 +152,10 @@ class MLoREFrameCodec(CompressionModel):
         self._init_heads(p)
         
         print(f"[MLoREFrameCodec] Initialized with stage={stage}, tasks={self.tasks}")
+        if checkpoint:
+            self.load_checkpoint(str(checkpoint), strict=False)
+        if bool(real):
+            self.update(force=True)
     
     def _init_backbone(self, p, stage, pretrained, img_size, drop_path_rate):
         """Initialize backbone based on training stage."""
@@ -268,7 +291,21 @@ class MLoREFrameCodec(CompressionModel):
             if 'loss' in key:
                 out[key] = info[key]
         
-        return out
+        # Align with the unified CompressionModel evaluation contract:
+        # forward_test returns (coded_unit, task_feats) so callers can compute bits consistently.
+        coded_unit: Dict[str, Any] = {}
+        if return_likelihoods and "likelihoods" in out:
+            coded_unit["likelihoods"] = out["likelihoods"]
+        elif "bpp_loss" in out:
+            # Fallback: expose estimated bits directly (bits, not bpp).
+            num_pixels = int(x.size(0) * x.size(2) * x.size(3))
+            coded_unit["bits"] = {"estimated": float(out["bpp_loss"]) * float(num_pixels)}
+        else:
+            coded_unit["bits"] = {}
+
+        task_feats = {k: v for k, v in out.items() if k in tasks}
+        return coded_unit, task_feats
+
     
     def get_feature_numel(self, x: torch.Tensor) -> int:
         """Get number of elements in feature representation."""
@@ -389,8 +426,9 @@ class MLoREFrameCodec(CompressionModel):
         if not hasattr(self.backbone, 'compress'):
             raise RuntimeError("Backbone does not have compression module")
         compress_module = self.backbone.compress
-        
-        decompressed = compress_module.decompress(strings, pstate["shape"])
+
+        cu = coded_unit if coded_unit is not None else {"strings": strings, "pstate": pstate}
+        decompressed = compress_module.decompress(cu["strings"], pstate["shape"])
         feat_hat = decompressed["x_hat"]
         
         # Reshape back to sequence format
