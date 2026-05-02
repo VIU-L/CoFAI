@@ -12,7 +12,7 @@ from cofai.latent_codecs.vit_feature_codec import (
     VitUnionLatentCodecCtxAsHyper,
     VbrVitUnionLatentCodec,
 )
-from cofai.utils.registery import instantiate_class, register
+from cofai.engine.registry import instantiate_class, register
 
 
 @register("MPC_I1")
@@ -56,12 +56,14 @@ class MPC_I1(CompressionModel):
             out (dict): Dictionary containing:
 
                 - "likelihoods": Likelihoods from the codec
-                - "x_hat": Reconstructed image tensor
+                - "x_hat": Reconstructed image tensor (legacy training key)
+                - "rec": Same tensor as ``x_hat``
         """
         tk_enc = self.tokenizer.encode(x)
         tk_out = self.token_codec(tk_enc["tokens"])
         x_hat = self.tokenizer.decode(tk_enc["z_q"])
-        return {"likelihoods": tk_out["likelihoods"], "x_hat": x_hat}
+        # ``rec`` aligns eval protocol (``x_hat`` kept for existing training code).
+        return {"likelihoods": tk_out["likelihoods"], "x_hat": x_hat, "rec": x_hat}
 
     def compress(self, x, **kwargs):
         """
@@ -97,13 +99,13 @@ class MPC_I1(CompressionModel):
 
                 - "z_q": Quantized features
                 - "tokens": VQGAN tokens
-                - "x_hat": Reconstructed image tensor
+                - "rec": Reconstructed image tensor
         """
         out = self.token_codec.decompress(**coded_unit)
         tokens = out["tokens"]
         z_q = self.tokenizer.tokens_to_features(tokens)
-        x_hat = self.tokenizer.decode(z_q)
-        task_feats = {"z_q": z_q, "tokens": tokens, "x_hat": x_hat}
+        rec = self.tokenizer.decode(z_q)
+        task_feats = {"z_q": z_q, "tokens": tokens, "rec": rec}
         return task_feats
 
 
@@ -135,6 +137,7 @@ class MPC_I2(CompressionModel):
         self,
         dino_backbone={},
         dino_codec={},
+        heads: dict | None = None,
         **kwargs,
     ):
         super().__init__()
@@ -145,6 +148,19 @@ class MPC_I2(CompressionModel):
             self.dino = Dinov2TimmBackbone(**dino_backbone)
             self.dino_codec = VitUnionLatentCodec(**dino_codec)
         self.patch_size = self.dino.patch_size
+
+        self.heads = nn.ModuleDict()
+        if heads:
+            if not isinstance(heads, dict):
+                raise TypeError("heads must be a dict mapping task -> head config")
+            for task, hcfg in heads.items():
+                if not isinstance(task, str):
+                    continue
+                if hcfg is None:
+                    continue
+                if not isinstance(hcfg, dict) or "type" not in hcfg:
+                    raise ValueError(f"heads.{task} must be a dict with a 'type' field")
+                self.heads[task] = instantiate_class(hcfg)
 
     def forward(self, x, qp=0, **kwargs):
         """
@@ -266,7 +282,8 @@ class MPC_I2(CompressionModel):
             tasks (list of str): List of tasks to perform. Supported tasks:
 
                 - "cls": Classification task
-                - "seg": Segmentation task
+                - "semseg": Semantic segmentation task
+                - "rae": RAE task (if ``heads.rec``/``heads.rae`` is set, decoder image; else patch tokens)
             **kwargs (dict): Additional keyword arguments (currently unused).
 
         Returns:
@@ -276,10 +293,11 @@ class MPC_I2(CompressionModel):
                 - "pstate": Compression state information
                 - "h_hat": Reconstructed features
 
-            task_feats (dict): Dictionary of task-specific features:
+            task_feats (dict): Per-task outputs (only keys with a configured head or raw ``rae`` tokens)
 
-                - "cls": Classification features (if "cls" in tasks)
-                - "seg": Segmentation features (if "seg" in tasks)
+                - "cls": logits if ``heads.cls`` is set
+                - "semseg": logits if ``heads.semseg`` is set
+                - "rae": see task description above
         """
         with torch.inference_mode():
             h_dino = self.dino.encode(x)
@@ -292,9 +310,26 @@ class MPC_I2(CompressionModel):
 
             task_feats = {}
             if "cls" in tasks:
-                task_feats["cls"] = self.dino.decode_cls(h_dino_hat)
-            if "seg" in tasks:
-                task_feats["seg"] = self.dino.decode_seg(h_dino_hat, token_res)
+                feat_cls = self.dino.decode_cls(h_dino_hat)
+                if "cls" in self.heads:
+                    task_feats["cls"] = self.heads["cls"](feat_cls)
+            if "semseg" in tasks:
+                feat_semseg = self.dino.decode_seg(h_dino_hat, token_res)
+                if "semseg" in self.heads:
+                    task_feats["semseg"] = self.heads["semseg"].predict(
+                        feat_semseg, scale=int(self.patch_size)
+                    )
+            if "rae" in tasks:
+                feat_rae = self.dino.decode_rae(h_dino_hat, token_res)
+                head_key = "rec" if "rec" in self.heads else ("rae" if "rae" in self.heads else None)
+                if head_key is not None:
+                    task_feats["rae"] = self.heads[head_key].predict(
+                        feat_rae,
+                        token_res=token_res,
+                        token_format="patch",
+                    )
+                else:
+                    task_feats["rae"] = feat_rae
 
             return coded_unit, task_feats
 
@@ -347,24 +382,39 @@ class MPC_I2(CompressionModel):
             tasks (list of str): List of tasks to perform. Supported tasks:
 
                 - "cls": Classification task
-                - "seg": Segmentation task
+                - "semseg": Semantic segmentation task
+                - "rae": RAE task (see ``forward_test`` for head vs patch-token output)
 
             **kwargs (dict): Additional keyword arguments (currently unused).
 
         Returns:
-            task_feats (dict): Dictionary of task-specific features:
-
-                - "cls": Classification features (if "cls" in tasks)
-                - "seg": Segmentation features (if "seg" in tasks)
+            task_feats (dict): Same rules as :meth:`forward_test` (heads applied inside each task branch).
         """
         encoded = coded_unit
         token_res = coded_unit["pstate"]["token_res"]
         decoded = self.dino_codec.decompress(**encoded)
         task_feats = {}
         if "cls" in tasks:
-            task_feats["cls"] = self.dino.decode_cls(decoded["h_hat"])
-        if "seg" in tasks:
-            task_feats["seg"] = self.dino.decode_seg(decoded["h_hat"], token_res)
+            feat_cls = self.dino.decode_cls(decoded["h_hat"])
+            if "cls" in self.heads:
+                task_feats["cls"] = self.heads["cls"](feat_cls)
+        if "semseg" in tasks:
+            feat_semseg = self.dino.decode_seg(decoded["h_hat"], token_res)
+            if "semseg" in self.heads:
+                task_feats["semseg"] = self.heads["semseg"].predict(
+                    feat_semseg, scale=int(self.patch_size)
+                )
+        if "rae" in tasks:
+            feat_rae = self.dino.decode_rae(decoded["h_hat"], token_res)
+            head_key = "rec" if "rec" in self.heads else ("rae" if "rae" in self.heads else None)
+            if head_key is not None:
+                task_feats["rae"] = self.heads[head_key].predict(
+                    feat_rae,
+                    token_res=token_res,
+                    token_format="patch",
+                )
+            else:
+                task_feats["rae"] = feat_rae
         return task_feats
 
 
@@ -406,6 +456,7 @@ class MPC_I12(CompressionModel):
         vqgan_codec={},
         dino_backbone={},
         dino_codec={},
+        heads: dict | None = None,
         **kwargs,
     ):
         super().__init__()
@@ -414,6 +465,19 @@ class MPC_I12(CompressionModel):
         self.dino = Dinov2TimmBackbone(**dino_backbone)
         self.dino_codec = VitUnionLatentCodecWithCtx(**dino_codec)
         self.patch_size = self.dino.patch_size
+
+        self.heads = nn.ModuleDict()
+        if heads:
+            if not isinstance(heads, dict):
+                raise TypeError("heads must be a dict mapping task -> head config")
+            for task, hcfg in heads.items():
+                if not isinstance(task, str):
+                    continue
+                if hcfg is None:
+                    continue
+                if not isinstance(hcfg, dict) or "type" not in hcfg:
+                    raise ValueError(f"heads.{task} must be a dict with a 'type' field")
+                self.heads[task] = instantiate_class(hcfg)
 
         # Additional branch for enhancing VQGAN reconstruction using DINOv2 features
         D_DINO = dino_codec["h_dim"]
@@ -424,7 +488,21 @@ class MPC_I12(CompressionModel):
             conv(D_VQGAN, D_VQGAN, kernel_size=3, stride=1),
         )
 
-    def forward(self, x, **kwargs):
+    def _apply_heads(self, task_feats: dict, *, tasks: list[str], token_res) -> dict:
+        out: dict = {}
+        if "cls" in tasks and "cls" in task_feats and "cls" in self.heads:
+            out["cls"] = self.heads["cls"](task_feats["cls"])
+
+        if "semseg" in tasks and "semseg" in task_feats and "semseg" in self.heads:
+            out["semseg"] = self.heads["semseg"].predict(
+                task_feats["semseg"], scale=int(self.patch_size)
+            )
+
+        if "rec" in tasks and "rec" in task_feats:
+            out["rec"] = task_feats["rec"]
+        return out
+
+    def forward(self, x, qp=0, **kwargs):
         """
         Forward pass for training.
 
@@ -582,12 +660,11 @@ class MPC_I12(CompressionModel):
             x (torch.Tensor): Input image tensor of shape (B, C, H, W).
             tasks (list of str): List of tasks to perform. Supported tasks:
 
-                - "rec1": Basic VQGAN reconstruction
-                - "rec2": Enhanced reconstruction using DINOv2 features
+                - "rec": Reconstruction; branch chosen by ``recon_branch`` in kwargs (1=VQGAN-only, 2=enhanced).
                 - "cls": Classification task
-                - "seg": Segmentation task
+                - "semseg": Semantic segmentation task
 
-            **kwargs (dict): Additional keyword arguments (currently unused).
+            **kwargs (dict): Optional ``recon_branch`` (int, default 2): for ``rec`` only, 1=basic VQGAN, 2=enhanced.
 
         Returns:
             coded_data (dict): Dictionary containing compressed data:
@@ -599,10 +676,9 @@ class MPC_I12(CompressionModel):
 
             task_feats (dict): Dictionary of task-specific features:
 
-                - "rec1": Basic reconstruction (if "rec1" in tasks)
-                - "rec2": Enhanced reconstruction (if "rec2" in tasks)
+                - "rec": Reconstruction (if "rec" in tasks)
                 - "cls": Classification features (if "cls" in tasks)
-                - "seg": Segmentation features (if "seg" in tasks)
+                - "semseg": Segmentation features (if "semseg" in tasks)
         """
         with torch.inference_mode():
             vqgan_enc = self.vqgan.encode(x)
@@ -619,17 +695,34 @@ class MPC_I12(CompressionModel):
             h_dino_hat = dino_cu["h_hat"]
 
             task_feats = {}
-            if "rec1" in tasks:
-                task_feats["rec1"] = self.vqgan.decode(h_vqgan_ctx)
-            if "rec2" in tasks:
-                h_hat_for_vqgan = self.cond_dec_for_vqgan(
-                    torch.cat([dino_cu["h_hat_share"].detach(), h_vqgan_ctx], dim=1)
-                )
-                task_feats["rec2"] = self.vqgan.decode(h_hat_for_vqgan)
+            recon_branch = int(kwargs.get("recon_branch", 2))
+
+            # Kind-driven reconstruction: if task_specs declares any reconstruction tasks,
+            # emit outputs keyed by their labels (label naming is free at framework level).
+            task_specs = kwargs.get("task_specs")
+            recon_labels = []
+            if isinstance(task_specs, list):
+                for sp in task_specs:
+                    if isinstance(sp, dict) and sp.get("kind") == "rec" and sp.get("label"):
+                        recon_labels.append(str(sp["label"]))
+
+            if ("rec" in tasks) or recon_labels:
+                if recon_branch == 1:
+                    rec_img = self.tokenizer.decode(h_vqgan_ctx)
+                else:
+                    h_hat_for_vqgan = self.cond_dec_for_vqgan(
+                        torch.cat([dino_cu["h_hat_share"].detach(), h_vqgan_ctx], dim=1)
+                    )
+                    rec_img = self.tokenizer.decode(h_hat_for_vqgan)
+                if "rec" in tasks:
+                    task_feats["rec"] = rec_img
+                for lb in recon_labels:
+                    task_feats[lb] = rec_img
             if "cls" in tasks:
                 task_feats["cls"] = self.dino.decode_cls(h_dino_hat)
-            if "seg" in tasks:
-                task_feats["seg"] = self.dino.decode_seg(h_dino_hat, token_res)
+            if "semseg" in tasks:
+                task_feats["semseg"] = self.dino.decode_seg(h_dino_hat, token_res)
+            task_feats = self._apply_heads(task_feats, tasks=list(tasks), token_res=token_res)
 
             coded_data = {
                 "type": "frame",
@@ -671,19 +764,33 @@ class MPC_I12(CompressionModel):
         dino_decoded = self.dino_codec.decompress(**dino_cu, ctx=h_vqgan_ctx)
 
         task_feats = {}
-        if "rec1" in tasks:
-            task_feats["rec1"] = self.vqgan.decode(h_vqgan_ctx)
-        if "rec2" in tasks:
-            h_hat_for_vqgan = self.cond_dec_for_vqgan(
-                torch.cat([dino_decoded["h_hat_share"].detach(), h_vqgan_ctx], dim=1)
-            )
-            task_feats["rec2"] = self.vqgan.decode(h_hat_for_vqgan)
+        recon_branch = int(kwargs.get("recon_branch", 2))
+
+        task_specs = kwargs.get("task_specs")
+        recon_labels = []
+        if isinstance(task_specs, list):
+            for sp in task_specs:
+                if isinstance(sp, dict) and sp.get("kind") == "rec" and sp.get("label"):
+                    recon_labels.append(str(sp["label"]))
+
+        if ("rec" in tasks) or recon_labels:
+            if recon_branch == 1:
+                rec_img = self.tokenizer.decode(h_vqgan_ctx)
+            else:
+                h_hat_for_vqgan = self.cond_dec_for_vqgan(
+                    torch.cat([dino_decoded["h_hat_share"].detach(), h_vqgan_ctx], dim=1)
+                )
+                rec_img = self.tokenizer.decode(h_hat_for_vqgan)
+            if "rec" in tasks:
+                task_feats["rec"] = rec_img
+            for lb in recon_labels:
+                task_feats[lb] = rec_img
         if "cls" in tasks:
             task_feats["cls"] = self.dino.decode_cls(dino_decoded["h_hat"])
-        if "seg" in tasks:
-            task_feats["seg"] = self.dino.decode_seg(dino_decoded["h_hat"], token_res)
+        if "semseg" in tasks:
+            task_feats["semseg"] = self.dino.decode_seg(dino_decoded["h_hat"], token_res)
 
-        return task_feats
+        return self._apply_heads(task_feats, tasks=list(tasks), token_res=token_res)
 
 
 @register("MPC_I12_CtxAsHyper")
@@ -812,11 +919,10 @@ class MPC_I12_CtxAsHyper(CompressionModel):
             x (torch.Tensor): Input image tensor of shape (B, C, H, W).
             tasks (list of str): List of tasks to perform. Supported tasks:
 
-                - "rec1": Basic VQGAN reconstruction
-                - "rec2": Enhanced reconstruction using DINOv2 features
+                - "rec": Reconstruction; branch chosen by ``recon_branch`` in kwargs (1=VQGAN-only, 2=enhanced).
                 - "cls": Classification task
-                - "seg": Segmentation task
-            **kwargs (dict): Additional keyword arguments (currently unused).
+                - "semseg": Semantic segmentation task
+            **kwargs (dict): Optional ``recon_branch`` (int, default 2): for ``rec`` only.
 
         Returns:
             coded_data (dict): Dictionary containing compressed data:
@@ -828,10 +934,9 @@ class MPC_I12_CtxAsHyper(CompressionModel):
 
             task_feats (dict): Dictionary of task-specific features:
 
-                - "rec1": Basic reconstruction (if "rec1" in tasks)
-                - "rec2": Enhanced reconstruction (if "rec2" in tasks)
+                - "rec": Reconstruction (if "rec" in tasks)
                 - "cls": Classification features (if "cls" in tasks)
-                - "seg": Segmentation features (if "seg" in tasks)
+                - "semseg": Segmentation features (if "semseg" in tasks)
         """
         with torch.inference_mode():
             vqgan_enc = self.vqgan.encode(x)
@@ -848,17 +953,19 @@ class MPC_I12_CtxAsHyper(CompressionModel):
             h_dino_hat = dino_cu["h_hat"]
 
             task_feats = {}
-            if "rec1" in tasks:
-                task_feats["rec1"] = self.vqgan.decode(h_vqgan_ctx)
-            if "rec2" in tasks:
-                h_hat_for_vqgan = self.cond_dec_for_vqgan(
-                    torch.cat([dino_cu["h_hat_share"].detach(), h_vqgan_ctx], dim=1)
-                )
-                task_feats["rec2"] = self.vqgan.decode(h_hat_for_vqgan)
+            recon_branch = int(kwargs.get("recon_branch", 2))
+            if "rec" in tasks:
+                if recon_branch == 1:
+                    task_feats["rec"] = self.tokenizer.decode(h_vqgan_ctx)
+                else:
+                    h_hat_for_vqgan = self.cond_dec_for_vqgan(
+                        torch.cat([dino_cu["h_hat_share"].detach(), h_vqgan_ctx], dim=1)
+                    )
+                    task_feats["rec"] = self.tokenizer.decode(h_hat_for_vqgan)
             if "cls" in tasks:
                 task_feats["cls"] = self.dino.decode_cls(h_dino_hat)
-            if "seg" in tasks:
-                task_feats["seg"] = self.dino.decode_seg(h_dino_hat, token_res)
+            if "semseg" in tasks:
+                task_feats["semseg"] = self.dino.decode_seg(h_dino_hat, token_res)
 
             coded_data = {
                 "type": "frame",
@@ -925,20 +1032,18 @@ class MPC_I12_CtxAsHyper(CompressionModel):
 
             tasks (list of str): List of tasks to perform. Supported tasks:
 
-                - "rec1": Basic VQGAN reconstruction
-                - "rec2": Enhanced reconstruction using DINOv2 features
+                - "rec": Reconstruction; branch chosen by ``recon_branch`` in kwargs (1=VQGAN-only, 2=enhanced).
                 - "cls": Classification task
-                - "seg": Segmentation task
+                - "semseg": Semantic segmentation task
 
-            **kwargs (dict): Additional keyword arguments (currently unused).
+            **kwargs (dict): Optional ``recon_branch`` (int, default 2): for ``rec`` only.
 
         Returns:
             task_feats (dict): Dictionary of task-specific features:
 
-                - "rec1": Basic reconstruction (if "rec1" in tasks)
-                - "rec2": Enhanced reconstruction (if "rec2" in tasks)
+                - "rec": Reconstruction (if "rec" in tasks)
                 - "cls": Classification features (if "cls" in tasks)
-                - "seg": Segmentation features (if "seg" in tasks)
+                - "semseg": Segmentation features (if "semseg" in tasks)
         """
         vqgan_cu = coded_data["data"]["layer1"]
         dino_cu = coded_data["data"]["layer2"]
@@ -948,16 +1053,18 @@ class MPC_I12_CtxAsHyper(CompressionModel):
         dino_decoded = self.dino_codec.decompress(**dino_cu, ctx=h_vqgan_ctx)
 
         task_feats = {}
-        if "rec1" in tasks:
-            task_feats["rec1"] = self.vqgan.decode(h_vqgan_ctx)
-        if "rec2" in tasks:
-            h_hat_for_vqgan = self.cond_dec_for_vqgan(
-                torch.cat([dino_decoded["h_hat_share"].detach(), h_vqgan_ctx], dim=1)
-            )
-            task_feats["rec2"] = self.vqgan.decode(h_hat_for_vqgan)
+        recon_branch = int(kwargs.get("recon_branch", 2))
+        if "rec" in tasks:
+            if recon_branch == 1:
+                task_feats["rec"] = self.tokenizer.decode(h_vqgan_ctx)
+            else:
+                h_hat_for_vqgan = self.cond_dec_for_vqgan(
+                    torch.cat([dino_decoded["h_hat_share"].detach(), h_vqgan_ctx], dim=1)
+                )
+                task_feats["rec"] = self.tokenizer.decode(h_hat_for_vqgan)
         if "cls" in tasks:
             task_feats["cls"] = self.dino.decode_cls(dino_decoded["h_hat"])
-        if "seg" in tasks:
-            task_feats["seg"] = self.dino.decode_seg(dino_decoded["h_hat"], token_res)
+        if "semseg" in tasks:
+            task_feats["semseg"] = self.dino.decode_seg(dino_decoded["h_hat"], token_res)
 
         return task_feats
