@@ -1,5 +1,5 @@
 from .debug import extract_shapes
-from .registery import register
+from cofai.engine.registry import register
 from .utils import get_timestamp, setup_logger
 from .transforms import rgb2ycbcr, ycbcr2rgb
 from .tensor_ops import tensor2image, center_pad, center_crop

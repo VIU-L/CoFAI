@@ -10,7 +10,7 @@ import torch.nn.functional as F
 
 from compressai.models.base import CompressionModel
 from cofai.entropy_models.dcvc_base import DmcCompressionModel
-from cofai.utils.registery import instantiate_class, register
+from cofai.engine.registry import instantiate_class, register
 
 from cofai.models.dcvcrt.pframe import DMCP
 from cofai.models.dcvcrt.iframe import DMCI
