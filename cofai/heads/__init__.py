@@ -5,9 +5,14 @@ from .mlore_heads import (
     MLoREMLPHead,
     create_mlore_heads,
 )
+from .rae_heads import GeneralDecoder, RAEDiffusionHead
+
+
 __all__ = [
     "Dinov2ClassifierHead",
     "Dinov2SegmentationHead",
+    "GeneralDecoder",
+    "RAEDiffusionHead",
     # MLoRE/RFC components
     "MLoREConvHead",
     "MLoREDEConvHead",
