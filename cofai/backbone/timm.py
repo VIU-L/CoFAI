@@ -476,6 +476,37 @@ class MAETimmBackbone(nn.Module):
 
         return h
 
+    def decode_rae(self, h: torch.Tensor) -> torch.Tensor:
+        """Decode encoded features for RAE decoder input.
+
+        For RAE, we need to use LayerNorm without learnable affine parameters
+        (matching the behavior of DINOv2's decode_rae for RAE compatibility).
+
+        Args:
+            h (torch.Tensor): Encoded features from the encode method, shape (B, N, C).
+
+        Returns:
+            z (torch.Tensor): Patch tokens of shape (B, N_patches, C), without cls token.
+        """
+        # Apply final norm without learnable affine parameters (for RAE compatibility)
+        with torch.autocast(device_type=self.device_type, dtype=self.cast_dtype):
+            # Manual layer norm without affine parameters (like DINOv2 decode_rae)
+            eps = getattr(self.model.norm, "eps", 1e-6)
+            mean = h.mean(dim=-1, keepdim=True)
+            var = h.var(dim=-1, keepdim=True, unbiased=False)
+            h = (h - mean) / torch.sqrt(var + eps)
+
+            # Remove cls token if exists
+            if (
+                hasattr(self.model, "num_prefix_tokens")
+                and self.model.num_prefix_tokens > 0
+            ):
+                z = h[:, self.model.num_prefix_tokens :]
+            else:
+                z = h[:, 1:] if h.shape[1] > 1 else h
+
+        return z
+
 
 class SigLIP2TimmBackbone(nn.Module):
     """
@@ -590,3 +621,22 @@ class SigLIP2TimmBackbone(nn.Module):
 
         return h
 
+    def decode_rae(self, h: torch.Tensor) -> torch.Tensor:
+        """Decode encoded features for RAE decoder input.
+
+        Note: The encode() method already applies the final norm (without affine parameters),
+        matching the behavior of transformers SiglipVisionModel which applies post_layernorm
+        to last_hidden_state. So we don't need to apply it again here.
+
+        Args:
+            h (torch.Tensor): Encoded features from the encode method, shape (B, N, C).
+                            This is already the output with final norm applied.
+
+        Returns:
+            z (torch.Tensor): Patch tokens of shape (B, N_patches, C).
+        """
+        # SigLIP2's encode() already applies final norm (without affine parameters)
+        # SigLIP2 doesn't have cls token, so return all tokens
+        z = h  # (B, N_patches, C)
+
+        return z
