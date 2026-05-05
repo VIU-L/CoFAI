@@ -1,0 +1,44 @@
+# @package _global_
+defaults:
+  - /args: default
+  - /dataloader: default
+  - /data: imagenet_sel2k
+  - /heads: dinov2_head
+  - _self_
+
+name: imagenet-sel2k--Bypass-dinov2-base-reg4-rae-512px
+description: "data: ImageNet sel2k; model: Bypass + DINOv2-base reg4 last1 layer + RAE decoder; task: reconstruction"
+dataset:
+  type: cofai.datasets.ImageFolder
+  root: ${PROJECT_ROOT}/data/ImageNet_val_sel2k
+  # This folder contains images; when tasks includes "rec", the dataset returns GT as sample["rec"] = img copy.
+  split: img
+  return_dict: true
+  tasks: [rec]
+test_transforms:
+  # PadToMultiple will also record the valid_roi, so we only calculate metrics on the valid region.
+  - type: cofai.transforms.PadToMultiple
+    multiple: 16
+    keys: [img, rec]
+  - type: cofai.transforms.ToTensor
+    keys: [img, rec]
+collate:
+  mode: stack_only
+task_configs:
+  - label: rae
+    kind: rec
+    meter:
+      type: cofai.metrics.iqa_metrics.IQAPerSampleMeter
+      metrics: ["PSNR", "MS-SSIM"]
+model:
+  type: Dinov2TimmBypass
+  dino_backbone:
+    model_size: base
+    img_size: 512
+    patch_size: 16
+    dynamic_size: true
+    slot: -3
+    n_last_blocks: 4
+    with_registers: true
+  heads:
+    rec: ${heads.rae_dinov2_base_reg4_512px}
