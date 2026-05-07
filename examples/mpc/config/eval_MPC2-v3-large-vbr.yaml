@@ -42,7 +42,11 @@ model:
     z_dim: 48
     groups: 24
 
+  heads:
+    cls: ${heads.imagenet_cls_large_last4}
+    semseg: ${heads.ade20k_seg_large_last4}
+
 allow_heads:
   - imagenet_cls_large_last4
-  - voc2012_seg_large_last4
   - ade20k_seg_large_last4
+  - voc2012_seg_large_last4

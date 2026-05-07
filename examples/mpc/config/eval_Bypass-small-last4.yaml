@@ -14,7 +14,11 @@ model:
     slot: -3
     n_last_blocks: 4
 
+  heads:
+    cls: ${heads.imagenet_cls_small_last4}
+    semseg: ${heads.ade20k_seg_small_last4}
+
 allow_heads:
   - imagenet_cls_small_last4
-  - voc2012_seg_small_last4
   - ade20k_seg_small_last4
+  - voc2012_seg_small_last4

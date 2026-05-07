@@ -56,30 +56,35 @@ CoFAI/
 
 ## 测试方法
 
+在仓库根目录执行（需已设置 `PROJECT_ROOT`，见项目 README）。默认按 `--quality` **只跑一轮**；若要与 YAML 中的 `multi_run` 一致、扫多个 quality，请加 **`--multi-run`**。
+
 ```bash
-# MPC2 DINO Lagre VBR 测试 ImageNet 分类任务
-CUDA_VISIBLE_DEVICES=0 python examples/mpc/run_eval.py \
+# MPC2 DINO Large VBR 测试 ImageNet 分类任务
+CUDA_VISIBLE_DEVICES=0 poetry run python examples/mpc/run_eval.py \
     --config examples/mpc/config/eval_base.yaml examples/mpc/config/eval_MPC2-v3-large-vbr.yaml \
     --preset imagenet_sel2k_cls \
     --head "imagenet_cls_large_last4" \
-    --quality 1.0 \
-    --cuda --recon 0 --output_dir eval_test --real
+    --quality 0 \
+    --cuda --recon 0 --real \
+    --output_dir logs/imagenet_sel2k_cls_mpc2_dino_large_vbr
 
 # MPC2 DINO Base VBR 测试 VOC2012 分割任务
-CUDA_VISIBLE_DEVICES=0 python examples/mpc/run_eval.py \
+CUDA_VISIBLE_DEVICES=0 poetry run python examples/mpc/run_eval.py \
     --config examples/mpc/config/eval_base.yaml examples/mpc/config/eval_MPC2-v3-base-vbr.yaml \
     --preset voc2012_val_seg \
     --head "voc2012_seg_base_last4" \
-    --quality 1.0 \
-    --cuda --recon 0 --output_dir eval_test --real
+    --quality 16 \
+    --cuda --recon 0 --real \
+    --output_dir logs/voc2012_val_seg_mpc2_dino_base_vbr
 
 # MPC2 DINO Small VBR 测试 ADE20K 分割任务
-CUDA_VISIBLE_DEVICES=0 python examples/mpc/run_eval.py \
+CUDA_VISIBLE_DEVICES=0 poetry run python examples/mpc/run_eval.py \
     --config examples/mpc/config/eval_base.yaml examples/mpc/config/eval_MPC2-v3-small-vbr.yaml \
     --preset ade20k_val_seg \
     --head "ade20k_seg_small_last4" \
-    --quality 1.0 \
-    --cuda --recon 0 --output_dir eval_test --real
+    --quality 32 \
+    --cuda --recon 0 --real \
+    --output_dir logs/ade20k_val_seg_mpc2_dino_small_vbr
 ```
 
 参数说明：
@@ -87,7 +92,8 @@ CUDA_VISIBLE_DEVICES=0 python examples/mpc/run_eval.py \
 - `--config`: 配置文件路径，可多个叠加
 - `--preset`: 预定义的评估任务名称，需要与配置文件中的任务名称一致
 - `--head`: 头部模型名称，需要是预定义的头部模型
-- `--quality`: 质量因子，仅用作任务标签
+- `--quality`: 码率/量化档位索引（整数，传给模型的 `qp`；脚本会将 `"1.0"` 规范为 `1`）
+- `--multi-run`: 若合并后的配置含 `multi_run`，对每个档位各跑一次并写出汇总；**不加则只跑当前 `--quality` 一次**
 - `--cuda`: 使用CUDA
 - `--recon`: 对于MPC模型，使用第几层分支的重建图像，当前可选[0,1,2]
 - `--real`: 启用真实熵编码，写入码流；否则使用码率估计，不写入码流
