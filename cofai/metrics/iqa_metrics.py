@@ -491,7 +491,6 @@ def create_img_metrics(metric_names: Union[str, list] = None) -> Dict[str, Calla
         - DISTS: Deep Image Structure and Texture Similarity
         - PieAPP: Perceptual Image-Error Assessment through Pairwise Preference
         - AHIQ: Attention-based Hybrid Image Quality
-        - CLIP-SIM: CLIP-based image similarity
         - TOPIQ-FR: TopIQ Full Reference
         - TOPIQ-NR: TopIQ No Reference
         - MUSIQ: Multi-scale Image Quality Transformer
@@ -520,7 +519,7 @@ def create_img_metrics(metric_names: Union[str, list] = None) -> Dict[str, Calla
         "DISTS": lambda: pyiqa.create_metric("dists", device=DEVICE),
         "PieAPP": lambda: pyiqa.create_metric("pieapp", device=DEVICE),
         "AHIQ": lambda: pyiqa.create_metric("ahiq", device=DEVICE),
-        "CLIP-SIM": lambda: create_clip_sim_metric("ViT-B/32"),
+        # "CLIP-SIM": lambda: create_clip_sim_metric("ViT-B/32"),
         "TOPIQ-FR": lambda: pyiqa.create_metric("topiq_fr", device=DEVICE),
         "TOPIQ-NR": lambda: pyiqa.create_metric("topiq_nr", device=DEVICE),
         "MUSIQ": lambda: pyiqa.create_metric("musiq", device=DEVICE),
