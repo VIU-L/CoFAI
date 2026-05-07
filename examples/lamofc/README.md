@@ -43,7 +43,8 @@ CUDA_VISIBLE_DEVICES=0 python examples/lamofc/run_eval_slide.py \
     --preset voc2012_sel20_seg \
     --head "voc2012_seg_small_last1" \
     --quality 1.0 \
-    --cuda --output_dir eval_test --real
+    --cuda --real \
+    --output_dir logs/voc2012_sel20_seg_dino_orig_slide_patch_small_last1_vtm
 ```
 
 测试整图推理
@@ -54,7 +55,8 @@ CUDA_VISIBLE_DEVICES=0 python examples/lamofc/run_eval.py \
     --preset voc2012_sel20_seg \
     --head "voc2012_seg_small_last1" \
     --quality 1.0 \
-    --cuda --output_dir eval_test --real
+    --cuda --real \
+    --output_dir logs/voc2012_sel20_seg_dino_timm_patch_small_last1_vtm
 
 ```
 
