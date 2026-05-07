@@ -365,7 +365,12 @@ def eval_model(cfg):
         os.makedirs(temp_input_dir, exist_ok=True)
 
     # 评估循环
-    for x, img_meta in tqdm.tqdm(dataset):
+    for batch in tqdm.tqdm(dataset):
+        x = batch["img"]
+        img_meta = dict(batch["meta"])
+        if "semseg" in batch:
+            sl = np.asarray(batch["semseg"], dtype=np.int64).squeeze(-1)
+            img_meta["seg_label"] = sl
         x = ToTensor()(x).to(device)
         x = x.unsqueeze(0) if x.dim() == 3 else x
         x_orig = x.clone()
@@ -401,7 +406,7 @@ def eval_model(cfg):
             logits = cls_head.forward(task_feats["cls"])
             cls_preds = F.softmax(logits, dim=1)
             values, top_indices = torch.topk(cls_preds, k=5, dim=1)
-            cls_metric.update(top_indices, [img_meta["cls_label"]])
+            cls_metric.update(top_indices.cpu().tolist(), [img_meta["cls_label"]])
 
         # 更新分割指标
         if "seg" in tasks:

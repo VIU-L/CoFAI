@@ -33,14 +33,16 @@ CUDA_VISIBLE_DEVICES=0 python examples/vqfc/run_eval_slide.py \
     --config examples/vqfc/config/eval_base.yaml examples/vqfc/config/dino_orig_slide_giant_seg_vqfc_64.yaml \
     --preset voc2012_sel20_seg \
     --head voc2012_seg_giant_last1 \
-    --quality 1.0 \
-    --cuda --output_dir eval_test --real
+    --quality 0 \
+    --cuda --real \
+    --output_dir logs/voc2012_sel20_seg_dino_orig_slide_giant_seg_vqfc_64
 
 CUDA_VISIBLE_DEVICES=0 python examples/vqfc/run_eval_slide.py \
       --config examples/vqfc/config/eval_base.yaml examples/vqfc/config/dino_orig_slide_giant_cls_vqfc_512.yaml \
       --preset imagenet_sel100_cls \
       --head imagenet_cls_giant_last1 \
-      --quality 1.0 \
-      --cuda --output_dir eval_test --real
+      --quality 0 \
+      --cuda --real \
+      --output_dir logs/imagenet_sel100_cls_dino_orig_slide_giant_cls_vqfc_512
 ```
 
