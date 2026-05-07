@@ -8,11 +8,23 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 __all__ = [
     "MLoRETransformsConfig",
+    "MLORE_ALIGNED_KEYS",
     "get_mlore_transforms_cfg",
     "get_mlore_train_transforms",
     "get_mlore_val_transforms",
     "get_mlore_transforms",
 ]
+
+# Image + dense maps that must share geometry (pad/crop/flip/scale) for batched MLoRE/RFC loaders.
+MLORE_ALIGNED_KEYS: Tuple[str, ...] = (
+    "img",
+    "semseg",
+    "edge",
+    "human_parts",
+    "normals",
+    "sal",
+    "depth",
+)
 
 
 @dataclass(frozen=True)
@@ -86,14 +98,14 @@ def get_mlore_train_transforms(p: Any = None, cfg: Optional[MLoRETransformsConfi
     c = _resolve_cfg(p, cfg)
     ops: List[Any] = []
 
-    _seg_keys = ("img", "semseg")
+    _aligned_keys = MLORE_ALIGNED_KEYS
 
     if c.enable_random_scaling:
         ops.append(
             transforms.RandomScaling(
                 scale_factors=list(c.random_scaling_factors),
                 discrete=bool(c.random_scaling_discrete),
-                keys=_seg_keys,
+                keys=_aligned_keys,
             )
         )
     if c.enable_random_crop:
@@ -101,12 +113,12 @@ def get_mlore_train_transforms(p: Any = None, cfg: Optional[MLoRETransformsConfi
             transforms.RandomCrop(
                 size=c.train_scale,
                 cat_max_ratio=float(c.random_crop_cat_max_ratio),
-                keys=_seg_keys,
+                keys=_aligned_keys,
             )
         )
     if c.enable_hflip:
         ops.append(
-            transforms.RandomHorizontalFlip(p=float(c.hflip_p), keys=_seg_keys)
+            transforms.RandomHorizontalFlip(p=float(c.hflip_p), keys=_aligned_keys)
         )
     if c.enable_photometric:
         ops.append(transforms.PhotoMetricDistortion())
@@ -114,9 +126,9 @@ def get_mlore_train_transforms(p: Any = None, cfg: Optional[MLoRETransformsConfi
     ops.extend(
         [
             transforms.Normalize(mean=list(c.mean), std=list(c.std)),
-            transforms.PadImage(size=c.train_scale, keys=_seg_keys),
+            transforms.PadImage(size=c.train_scale, keys=_aligned_keys),
             transforms.AddIgnoreRegions(),
-            transforms.ToTensor(keys=_seg_keys),
+            transforms.ToTensor(keys=_aligned_keys),
         ]
     )
     return torchvision.transforms.Compose(ops)
@@ -128,13 +140,13 @@ def get_mlore_val_transforms(p: Any = None, cfg: Optional[MLoRETransformsConfig]
     from cofai import transforms
 
     c = _resolve_cfg(p, cfg)
-    _seg_keys = ("img", "semseg")
+    _aligned_keys = MLORE_ALIGNED_KEYS
     return torchvision.transforms.Compose(
         [
             transforms.Normalize(mean=list(c.mean), std=list(c.std)),
-            transforms.PadImage(size=c.test_scale, keys=_seg_keys),
+            transforms.PadImage(size=c.test_scale, keys=_aligned_keys),
             transforms.AddIgnoreRegions(),
-            transforms.ToTensor(keys=_seg_keys),
+            transforms.ToTensor(keys=_aligned_keys),
         ]
     )
 
@@ -157,7 +169,7 @@ def get_mlore_transforms_cfg(
     """
     c = _resolve_cfg(p, cfg)
     split_l = str(split).lower()
-    seg_keys = ["img", "semseg"]
+    seg_keys = list(MLORE_ALIGNED_KEYS)
 
     # Prefer `cofai.transforms.*` namespace for YAML `type:` strings.
     T = "cofai.transforms"

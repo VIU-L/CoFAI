@@ -40,7 +40,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from cofai.models import MLoREFrameCodec, MLoREVideoCodec
-from cofai.datasets import PASCALContextDataset, NYUDDataset, get_mlore_transforms, collate_mlore
+from cofai.datasets import PASCALContextDataset, NYUDDataset, collate_mlore
+from cofai.transforms import get_mlore_transforms
 from cofai.losses.mlore_loss import MLoRECodingLoss
 from cofai.utils.tensor_ops import center_pad
 from cofai.utils.rfc_utils import center_crop
@@ -213,36 +214,45 @@ def instantiate_model(config: Dict, eval_tasks=None, device: str = 'cuda') -> ML
 
 
 def get_performance_meter(task: str, p: Dict) -> Any:
-    """获取任务对应的性能评估器"""
+    """RFC task meter backed by ``cofai.metrics`` (migrated from examples/rfc/evaluation)."""
     database = p.get('train_db_name', 'PASCALContext')
     ignore_index = p.get('ignore_index', 255)
-    
+
     if task == 'semseg':
-        from cofai.utils.evaluation.eval_semseg import SemsegMeter
-        return SemsegMeter(database, ignore_idx=ignore_index)
-    elif task == 'human_parts':
-        from cofai.utils.evaluation.eval_human_parts import HumanPartsMeter
-        return HumanPartsMeter(database, ignore_idx=ignore_index)
-    elif task == 'edge':
-        from cofai.utils.evaluation.eval_edge import EdgeMeter
+        from cofai.metrics import SemanticSegmentationMeter
+
+        return SemanticSegmentationMeter(database, ignore_idx=ignore_index)
+    if task == 'human_parts':
+        from cofai.metrics import HumanPartSegmentationMeter
+
+        return HumanPartSegmentationMeter(database, ignore_idx=ignore_index)
+    if task == 'edge':
+        from cofai.metrics import EdgeDetectionMeter
+
         edge_w = p.get('edge_w', 0.95)
-        return EdgeMeter(pos_weight=edge_w, ignore_index=ignore_index)
-    elif task == 'normals':
-        from cofai.utils.evaluation.eval_normals import NormalsMeter
-        return NormalsMeter(ignore_index=ignore_index)
-    elif task == 'sal':
-        from cofai.utils.evaluation.eval_sal import SaliencyMeter
-        return SaliencyMeter(ignore_index=ignore_index, threshold_step=0.05, beta_squared=0.3)
-    elif task == 'depth':
-        from cofai.utils.evaluation.eval_depth import DepthMeter
-        max_depth = p.get('TASKS', {}).get('depth_max', 10.0)
-        min_depth = p.get('TASKS', {}).get('depth_min', 0.001)
-        return DepthMeter(max_depth=max_depth, min_depth=min_depth)
-    elif task == 'scene':
-        from cofai.utils.evaluation.eval_scene import ClassificationMeter
-        return ClassificationMeter(database)
-    else:
-        return None
+        return EdgeDetectionMeter(pos_weight=edge_w, ignore_index=ignore_index)
+    if task == 'normals':
+        from cofai.metrics import SurfaceNormalsEstimationMeter
+
+        return SurfaceNormalsEstimationMeter(ignore_index=ignore_index)
+    if task == 'sal':
+        from cofai.metrics import SaliencyDetectionMeter
+
+        return SaliencyDetectionMeter(
+            ignore_index=ignore_index, threshold_step=0.05, beta_squared=0.3
+        )
+    if task == 'depth':
+        from cofai.metrics import DepthEstimationMeter
+
+        tasks_cfg = p.get('TASKS') or {}
+        max_depth = tasks_cfg.get('depth_max', 10.0)
+        min_depth = tasks_cfg.get('depth_min', 0.001)
+        return DepthEstimationMeter(max_depth=max_depth, min_depth=min_depth)
+    if task == 'scene':
+        from cofai.metrics import SceneClassificationMeter
+
+        return SceneClassificationMeter(database)
+    return None
 
 
 @torch.no_grad()
@@ -360,7 +370,7 @@ def eval_model(cfg: OmegaConf) -> tuple:
     # ===== 保持与原始RFC一致：使用RFC同款 transforms 对 image + labels 一起处理 =====
     # 原始RFC的评估数据是通过 transforms.Normalize + PadImage + AddIgnoreRegions + ToTensor 得到的。
     if 'transform' not in dataset_config or dataset_config.get('transform') is None:
-        from cofai.datasets import get_mlore_transforms
+        from cofai.transforms import get_mlore_transforms
         # 优先使用模型自身的配置（create_mlore_config生成），保证TEST.SCALE一致
         p_for_tf = getattr(model, 'p', None)
         dataset_config['transform'] = get_mlore_transforms(p_for_tf, split='val')
@@ -422,9 +432,8 @@ def eval_model(cfg: OmegaConf) -> tuple:
             break
         
         # Forward pass（与原始RFC一致）
-        # 原始RFC: images = batch['image'].cuda(non_blocking=True)
-        # 原始RFC: targets = {task: batch[task].cuda(non_blocking=True) for task in two_d_tasks}
-        images = batch['image'].to(device, non_blocking=True)
+        # Original RFC used ``batch['image']``; ``collate_mlore`` stacks under ``img``.
+        images = batch["img"].to(device, non_blocking=True)
         targets = {task: batch[task].to(device, non_blocking=True) for task in tasks if task in batch}
         metas = batch.get('meta', [])
         
@@ -533,7 +542,7 @@ def eval_model(cfg: OmegaConf) -> tuple:
     
     # 添加任务指标
     for task, meter in task_meters.items():
-        task_results = meter.get_score(verbose=False)
+        task_results = meter.compute()
         if isinstance(task_results, dict):
             for key, val in task_results.items():
                 avg_metrics[f"{task}_{key}"] = val

@@ -30,46 +30,71 @@ class PerformanceMeter(object):
     def get_score(self, verbose=True):
         eval_dict = {}
         for t in self.tasks:
-            eval_dict[t] = self.meters[t].get_score(verbose)
+            m = self.meters[t]
+            eval_dict[t] = m.compute() if hasattr(m, "compute") else m.get_score(verbose)
 
         return eval_dict
 
+
+def _ignore_index(p):
+    return p["ignore_index"] if isinstance(p, dict) else p.ignore_index
+
+
 def get_single_task_meter(p, database, task):
-    """ Retrieve a meter to measure the single-task performance """
+    """Retrieve a meter to measure the single-task performance (``cofai.metrics``)."""
 
-    # ignore index based on transforms.AddIgnoreRegions
-    if task == 'semseg':
-        from evaluation.eval_semseg import SemsegMeter
-        return SemsegMeter(database, ignore_idx=p.ignore_index)
-    
-    if task == 'scene':
-        from evaluation.eval_scene import ClassificationMeter
-        return ClassificationMeter(database)
+    ignore_index = _ignore_index(p)
 
-    elif task == 'human_parts':
-        from evaluation.eval_human_parts import HumanPartsMeter
-        return HumanPartsMeter(database, ignore_idx=p.ignore_index)
+    if task == "semseg":
+        from cofai.metrics import SemanticSegmentationMeter
 
-    elif task == 'normals':
-        from evaluation.eval_normals import NormalsMeter
-        return NormalsMeter(ignore_index=p.ignore_index) 
+        return SemanticSegmentationMeter(database, ignore_idx=ignore_index)
 
-    elif task == 'sal':
-        from evaluation.eval_sal import  SaliencyMeter
-        return SaliencyMeter(ignore_index=p.ignore_index, threshold_step=0.05, beta_squared=0.3)
+    if task == "scene":
+        from cofai.metrics import SceneClassificationMeter
 
-    elif task == 'depth':
-        from evaluation.eval_depth import DepthMeter
-        # Set effective depth evaluation range. Refer to:
-        # https://github.com/sjsu-smart-lab/Self-supervised-Monocular-Trained-Depth-Estimation-using-Self-attention-and-Discrete-Disparity-Volum/blob/3c6f46ab03cfd424b677dfeb0c4a45d6269415a9/evaluate_city_depth.py#L55
-        return DepthMeter(max_depth=p.TASKS.depth_max, min_depth=p.TASKS.depth_min) 
+        return SceneClassificationMeter(database)
 
-    elif task == 'edge': # just for reference
-        from evaluation.eval_edge import EdgeMeter
-        return EdgeMeter(pos_weight=p['edge_w'], ignore_index=p.ignore_index)
+    if task == "human_parts":
+        from cofai.metrics import HumanPartSegmentationMeter
 
-    else:
-        raise NotImplementedError
+        return HumanPartSegmentationMeter(database, ignore_idx=ignore_index)
+
+    if task == "normals":
+        from cofai.metrics import SurfaceNormalsEstimationMeter
+
+        return SurfaceNormalsEstimationMeter(ignore_index=ignore_index)
+
+    if task == "sal":
+        from cofai.metrics import SaliencyDetectionMeter
+
+        return SaliencyDetectionMeter(
+            ignore_index=ignore_index, threshold_step=0.05, beta_squared=0.3
+        )
+
+    if task == "depth":
+        from cofai.metrics import DepthEstimationMeter
+
+        if isinstance(p, dict):
+            tc = p.get("TASKS", {}) or {}
+            max_depth = tc.get("depth_max", 10.0)
+            min_depth = tc.get("depth_min", 0.001)
+        else:
+            max_depth = p.TASKS.depth_max
+            min_depth = p.TASKS.depth_min
+        return DepthEstimationMeter(max_depth=max_depth, min_depth=min_depth)
+
+    if task == "edge":
+        from cofai.metrics import EdgeDetectionMeter
+
+        ew = (
+            p.get("edge_w", 0.95)
+            if isinstance(p, dict)
+            else float(getattr(p, "edge_w", 0.95))
+        )
+        return EdgeDetectionMeter(pos_weight=ew, ignore_index=ignore_index)
+
+    raise NotImplementedError
 
 @torch.no_grad()
 def save_model_pred_for_one_task(p, batch_idx, sample, output, save_dirs, task=None, epoch=None):

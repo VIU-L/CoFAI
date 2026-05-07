@@ -10,6 +10,25 @@
 - **FrameCodec**: 处理单帧多任务压缩
 - **VideoCodec**: 处理视频序列压缩
 
+
+## cofai-eval 评测
+
+**cofai-eval** 是基于 Hydra 配置的统一评测入口，通过 **`poetry run cofai-eval`** 命令串联数据集、模型与指标（详见 [docs/engine.md](../../docs/engine.md)）。这里将 RFC 的测试转化为 plan 配置，使其能够通过 cofai-eval 进行统一测试。
+
+```bash
+# 语义分割
+CUDA_VISIBLE_DEVICES=0 poetry run cofai-eval \
+  conf/plan/pascal-context--RFC-MLoRE-semseg.yaml \
+  args.real=false
+
+# 边缘检测
+CUDA_VISIBLE_DEVICES=0 poetry run cofai-eval \
+  conf/plan/pascal-context--RFC-MLoRE-edge.yaml \
+  args.real=false
+```
+
+> **注意（BPP计算差异）：** RFC 原版测试代码以经过 transforms 处理后的图像尺寸作为 BPP 的分母，而一般方法则使用数据集的原图尺寸。两种方式各有其合理性。为兼容 RFC 的设计选择，本实现的 plan 在 `PadImage` 之后增加了 **`SetImageAsOriginal`**，将 `ori_size` 指向 pad 后的图像尺寸，从而与提案方提供的结果对齐。
+
 ## 目录结构
 
 ```
@@ -138,18 +157,18 @@ torchrun --nproc_per_node=4 examples/rfc/run_train_rfc.py \
 # PASCAL Context 语义分割
 python examples/rfc/run_eval_rfc.py \
     --config examples/rfc/config/eval_base.yaml examples/rfc/config/eval_rfc_pascal.yaml \
-    --checkpoint /path/to/checkpoint.pth \
+    --checkpoint weights/rfc/semseg-ckpt.pth.tar \
     --task pascal_semseg \
     --cuda --real \
-    --output_dir ./eval_results/pascal_semseg
+    --output_dir logs/rfc_pascal_semseg
 
 # PASCAL Context 边缘检测
 python examples/rfc/run_eval_rfc.py \
     --config examples/rfc/config/eval_base.yaml examples/rfc/config/eval_rfc_pascal.yaml \
-    --checkpoint /path/to/checkpoint.pth \
+    --checkpoint weights/rfc/edge-ckpt.pth.tar \
     --task pascal_edge \
     --cuda --real \
-    --output_dir ./eval_results/pascal_edge
+    --output_dir logs/rfc_pascal_edge
 ```
 
 ### 评估多任务
