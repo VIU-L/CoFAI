@@ -1,5 +1,6 @@
 import torch
-import torchac
+# torchac unavailable in some local envs (build/import fails); need fix in future.
+# import torchac
 
 
 def pmf_to_cdf(pmf):
