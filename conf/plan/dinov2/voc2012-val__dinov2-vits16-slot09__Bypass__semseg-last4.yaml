@@ -1,0 +1,43 @@
+# @package _global_
+defaults:
+  - /args: default
+  - /dataloader: default
+  - /data: voc2012_val
+  - /heads: dinov2_head
+  - _self_
+
+name: voc2012-val__dinov2-vits16-slot09__Bypass__semseg-last4
+description: "Data: VOC2012 val; Model: DINOv2 ViT-S/16 slot09 last4; Codec: Bypass; Task: semantic segmentation"
+dataset: ${datasets.voc2012_val}
+test_transforms:
+  - type: cofai.transforms.PadImage
+    size: 512
+    keys: [img, semseg]
+  - type: cofai.transforms.PadToMultiple
+    multiple: 16
+    keys: [img, semseg]
+  - type: cofai.transforms.AddIgnoreRegions
+  - type: cofai.transforms.ToTensor
+    keys: [img, semseg]
+collate:
+  mode: stack_only
+task_configs:
+  - label: semseg
+    meter:
+      type: MeanIoUMetric
+      num_classes: 21
+model:
+  type: DinoFeatureCodecModel
+  dino_backbone:
+    type: cofai.backbone.Dinov2TimmBackbone
+    model_size: small
+    img_size: 512
+    patch_size: 16
+    dynamic_size: true
+    slot: 9
+    n_last_blocks: 4
+    with_registers: false
+  dino_codec:
+    type: cofai.latent_codecs.BypassLatentCodec
+  heads:
+    semseg: ${heads.voc2012_seg_small_last4}

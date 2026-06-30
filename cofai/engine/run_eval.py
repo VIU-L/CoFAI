@@ -94,6 +94,15 @@ def _bits_from_coded_data(out: Dict[str, Any]) -> Dict[str, float]:
                 for k, v in bits_items.items():
                     flat[f"{layer_name}.{frame_name}.{k}"] = float(v)
         return flat
+    if out_type == "slide_crops":
+        # Sliding-window models emit one coded_unit per crop; aggregate the bits
+        # of every crop into a single per-codec total.
+        flat = {}
+        for coded_unit in out["data"]:
+            bits_items = _bits_from_coded_unit(coded_unit)
+            for k, v in bits_items.items():
+                flat[k] = flat.get(k, 0.0) + float(v)
+        return flat
     raise NotImplementedError(f"Unsupported type: {out_type!r}")
 
 
@@ -587,14 +596,19 @@ def main() -> None:
     """Package entrypoint: `python -m cofai.engine.run_eval`."""
 
     load_dotenv(override=True, encoding="utf-8")
-    a = sys.argv
-    # conf/**/*.yaml → --config-name=<path under conf without .yaml>
-    for i in range(1, len(a)):
-        t = a[i].replace("\\", "/")
-        if t.startswith("conf/") and t.endswith(".yaml"):
-            a[i] = "--config-name=" + Path(t[5:]).with_suffix("").as_posix()
+    argv = sys.argv
+    # Sugar: a positional `*.yaml` plan path → Hydra --config-dir/--config-name,
+    # so any plan (under conf/ or elsewhere) runs as `cofai-eval path/to/plan.yaml`.
+    # Overrides like `args.x=y` contain '=', so they are left untouched.
+    for i, arg in enumerate(argv[1:], start=1):
+        if arg.endswith(".yaml") and "=" not in arg:
+            plan = Path(arg)
+            argv[i : i + 1] = [
+                f"--config-dir={plan.parent.resolve()}",
+                f"--config-name={plan.stem}",
+            ]
             break
-    a.extend(["hydra.run.dir=.", "hydra.output_subdir=null"])
+    argv += ["hydra.run.dir=.", "hydra.output_subdir=null"]
     _hydra_cli()
 
 
