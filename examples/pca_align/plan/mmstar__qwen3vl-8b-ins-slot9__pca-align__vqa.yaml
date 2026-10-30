@@ -8,7 +8,7 @@ description: "AI M2510 PCA-align; Qwen3-VL-8B-Instruct slot9; MMStar; 65-QP VBR 
 
 model:
   qwen_codec:
-    type: PCAAlignLatentCodec
+    type: cofai.latent_codecs.PCAAlignLatentCodec
     h_dim: 1152
     y_dim: 256
     z_dim: 48

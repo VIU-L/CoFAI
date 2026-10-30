@@ -11,6 +11,7 @@ from omegaconf import OmegaConf, open_dict
 
 from cofai.engine.bitrate import bits_from_coded_data
 from cofai.engine.checkpoint import load_checkpoint_into_model
+from cofai.engine.registry import get_obj_from_str
 from cofai.latent_codecs import PCAAlignLatentCodec
 from cofai.utils.download import parse_manifest
 
@@ -92,6 +93,7 @@ def test_example_inherits_ctc_and_matches_resource_manifest():
     with open_dict(cfg):
         cfg.PROJECT_ROOT = "/tmp/cofai-pca-align-test"
     assert cfg.model.qwen_backbone.max_new_tokens == 512
+    assert get_obj_from_str(cfg.model.qwen_codec.type) is PCAAlignLatentCodec
     for field in ["model_path", "dtype", "min_pixels", "max_pixels", "slot", "do_sample"]:
         assert cfg.model.qwen_backbone[field] == reference.model.qwen_backbone[field]
     assert OmegaConf.to_container(cfg.dataset) == OmegaConf.to_container(reference.dataset)
