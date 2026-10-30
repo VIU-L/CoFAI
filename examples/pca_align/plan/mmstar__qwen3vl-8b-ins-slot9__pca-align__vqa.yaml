@@ -7,8 +7,6 @@ name: mmstar__qwen3vl-8b-ins-slot9__pca-align__vqa
 description: "AI M2510 PCA-align; Qwen3-VL-8B-Instruct slot9; MMStar; 65-QP VBR checkpoint"
 
 model:
-  qwen_backbone:
-    local_files_only: true
   qwen_codec:
     type: PCAAlignLatentCodec
     h_dim: 1152
