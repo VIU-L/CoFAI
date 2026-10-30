@@ -4,20 +4,20 @@ from .vtc import VisualTokenCodec
 from .vtm import VtmCodec, VtmFeatureCodec, VtmLatentCodec
 from .mlore_codec import MLoREFeatureCodec, MLoREFeatureCodecLight
 from .bypass import BypassLatentCodec
+from .pca_align import PCAAlignLatentCodec
 from .vqfc import VQFeatureCodec
 from .orfc import OrthoRotationFeatureCodec
 from .raw_dtype import RawDtypeCodec
 from .fixed_gaussian import FixedGaussianCodec
-from .pca_align import PCAAlignLatentCodec
 
 __all__ = [
+    "PCAAlignLatentCodec",
     "FeatureScaleHyperprior",
     "BypassLatentCodec",
     "VQFeatureCodec",
     "OrthoRotationFeatureCodec",
     "RawDtypeCodec",
     "FixedGaussianCodec",
-    "PCAAlignLatentCodec",
     "VitUnionLatentCodec",
     "VitUnionLatentCodecWithCtx",
     "VitSeparateLatentCodec",
