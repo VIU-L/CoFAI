@@ -1,0 +1,3 @@
+# AI M2510 PCA-align; codec-only inference checkpoint, QPs 0 through 64.
+# Paths are relative to PROJECT_ROOT; the default URL is CoFAI-share.
+weights/pca_align/qwen3vl-8b-ins-slot9--pca-align-vbr-epoch005-inference.pth  sha256:2f4ab339

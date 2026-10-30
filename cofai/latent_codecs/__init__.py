@@ -8,6 +8,7 @@ from .vqfc import VQFeatureCodec
 from .orfc import OrthoRotationFeatureCodec
 from .raw_dtype import RawDtypeCodec
 from .fixed_gaussian import FixedGaussianCodec
+from .pca_align import PCAAlignLatentCodec
 
 __all__ = [
     "FeatureScaleHyperprior",
@@ -16,6 +17,7 @@ __all__ = [
     "OrthoRotationFeatureCodec",
     "RawDtypeCodec",
     "FixedGaussianCodec",
+    "PCAAlignLatentCodec",
     "VitUnionLatentCodec",
     "VitUnionLatentCodecWithCtx",
     "VitSeparateLatentCodec",
